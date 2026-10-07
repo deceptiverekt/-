@@ -1,0 +1,992 @@
+-- StarterPlayerScripts/OwnerPanel (LocalScript)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local TextService = game:GetService("TextService")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+local camera = workspace.CurrentCamera
+
+---------------------------------------------------------------------
+-- NETsourcesgg UI (Main, ToH, MM2, PIGGY, Settings, & Credits)
+---------------------------------------------------------------------
+local NetUI = {}
+local netGui 
+local notifHolder
+
+-- Color Palettes & States
+local activeThemeMode = "dark" -- "dark" or "light"
+local activeStrokeMode = "sky" -- "sky", "sunrise", "moonlit", "apple"
+
+local C = {
+	window = Color3.fromRGB(12, 12, 12),
+	panel = Color3.fromRGB(15, 15, 15),
+	item = Color3.fromRGB(18, 18, 18),
+	hover = Color3.fromRGB(25, 25, 25),
+	border = Color3.fromRGB(0, 3, 203),
+	text = Color3.fromRGB(0, 3, 203),
+	dim = Color3.fromRGB(0, 2, 120),
+	accent = Color3.fromRGB(0, 3, 203),
+}
+
+local registeredStrokes = {}
+local registeredFrames = {}
+
+local function updateThemeColors()
+	if activeThemeMode == "light" then
+		C.window = Color3.fromRGB(240, 240, 240)
+		C.panel = Color3.fromRGB(225, 225, 225)
+		C.item = Color3.fromRGB(210, 210, 210)
+		C.hover = Color3.fromRGB(195, 195, 195)
+		C.text = Color3.fromRGB(20, 20, 20)
+		C.dim = Color3.fromRGB(100, 100, 100)
+	else -- dark mode default
+		C.window = Color3.fromRGB(12, 12, 12)
+		C.panel = Color3.fromRGB(15, 15, 15)
+		C.item = Color3.fromRGB(18, 18, 18)
+		C.hover = Color3.fromRGB(25, 25, 25)
+		C.text = Color3.fromRGB(0, 3, 203)
+		C.dim = Color3.fromRGB(0, 2, 120)
+	end
+
+	-- Update Stroke colors based on stroke mode
+	local strokeColor = Color3.fromRGB(0, 3, 203)
+	if activeStrokeMode == "apple" then
+		strokeColor = Color3.fromRGB(255, 0, 0)
+	elseif activeStrokeMode == "sky" then
+		strokeColor = Color3.fromRGB(0, 3, 203)
+	end
+
+	for _, s in ipairs(registeredStrokes) do
+		if s and s.Parent then
+			if activeStrokeMode == "sunrise" or activeStrokeMode == "moonlit" then
+				local grad = s:FindFirstChildOfClass("UIGradient")
+				if not grad then
+					grad = Instance.new("UIGradient")
+					grad.Parent = s
+				end
+				if activeStrokeMode == "sunrise" then
+					grad.Color = ColorSequence.new(Color3.fromRGB(255, 100, 0), Color3.fromRGB(255, 0, 0))
+				else
+					grad.Color = ColorSequence.new(Color3.fromRGB(0, 102, 255), Color3.fromRGB(128, 0, 255))
+				end
+				s.Color = Color3.new(1, 1, 1)
+			else
+				local grad = s:FindFirstChildOfClass("UIGradient")
+				if grad then grad:Destroy() end
+				s.Color = strokeColor
+			end
+		end
+	end
+
+	for _, f in ipairs(registeredFrames) do
+		if f and f.Parent then
+			if f:IsA("Frame") or f:IsA("ScrollingFrame") then
+				if f.Name == "Main" then
+					f.BackgroundColor3 = C.window
+				elseif f.BackgroundTransparency < 1 then
+					f.BackgroundColor3 = C.panel
+				end
+			end
+		end
+	end
+end
+
+local FONT = Enum.Font.Code
+local TSIZE = 13
+local LEFT = Enum.TextXAlignment.Left
+local CENTER = Enum.TextXAlignment.Center
+local AUTO_Y = Enum.AutomaticSize.Y
+local BY_ORDER = Enum.SortOrder.LayoutOrder
+
+local function new(class, props, parent)
+	local o = Instance.new(class)
+	for k, v in pairs(props) do o[k] = v end
+	o.Parent = parent
+	return o
+end
+
+local function stroke(parent, color)
+	local s = new("UIStroke", {
+		Color = color or C.border, Thickness = 1,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+	}, parent)
+	table.insert(registeredStrokes, s)
+	return s
+end
+
+local function label(parent, text, props)
+	local p = {
+		BackgroundTransparency = 1, BorderSizePixel = 0, Font = FONT, TextSize = TSIZE,
+		TextColor3 = C.text, Text = text, TextXAlignment = LEFT,
+	}
+	for k, v in pairs(props or {}) do p[k] = v end
+	return new("TextLabel", p, parent)
+end
+
+local function isPress(input)
+	return input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+end
+
+local function isMove(input)
+	return input.UserInputType == Enum.UserInputType.MouseMovement
+		or input.UserInputType == Enum.UserInputType.Touch
+end
+
+local function fire(cb, ...)
+	if type(cb) ~= "function" then return end
+	local args = table.pack(...)
+	task.spawn(function()
+		local ok, err = pcall(cb, table.unpack(args, 1, args.n))
+		if not ok then
+			warn("[NovaHub] callback error: " .. tostring(err))
+			NetUI:Notify({ Title = "Error", Content = tostring(err):sub(1, 140), Duration = 6 })
+		end
+	end)
+end
+
+local function destroyOldCopies()
+	local roots = {}
+	table.insert(roots, CoreGui)
+	if typeof(gethui) == "function" then
+		local okH, h = pcall(gethui)
+		if okH and h then table.insert(roots, h) end
+	end
+	local pg = player:FindFirstChild("PlayerGui")
+	if pg then table.insert(roots, pg) end
+	for _, r in ipairs(roots) do
+		pcall(function()
+			local old = r:FindFirstChild("NovaHubUI")
+			if old then old:Destroy() end
+		end)
+	end
+end
+
+function NetUI:Notify(o)
+	if not (notifHolder and notifHolder.Parent) then return end
+	local f = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y,
+		BackgroundColor3 = C.panel, BorderSizePixel = 0,
+	}, notifHolder)
+	table.insert(registeredFrames, f)
+	stroke(f, C.border)
+	
+	new("Frame", { 
+		Size = UDim2.new(0, 4, 1, 0), 
+		Position = UDim2.new(1, -4, 0, 0), 
+		BackgroundColor3 = C.accent, 
+		BorderSizePixel = 0 
+	}, f)
+
+	local inner = new("Frame", {
+		Size = UDim2.new(1, -8, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(6, 0),
+	}, f)
+	new("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = BY_ORDER }, inner)
+	new("UIPadding", {
+		PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 8),
+		PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8),
+	}, inner)
+	
+	if o.Title and o.Title ~= "" then
+		label(inner, tostring(o.Title), {
+			Size = UDim2.new(1, 0, 0, 16), TextColor3 = C.text, LayoutOrder = 1,
+		})
+	end
+	label(inner, tostring(o.Content or ""), {
+		Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, TextWrapped = true,
+		TextColor3 = C.text, TextYAlignment = Enum.TextYAlignment.Top, LayoutOrder = 2,
+	})
+	
+	task.delay(o.Duration or 5, function()
+		if f.Parent then f:Destroy() end
+	end)
+end
+
+function NetUI:CreateWindow(opts)
+	opts = opts or {}
+	destroyOldCopies()
+
+	local W, H = 460, 520
+	local gui = new("ScreenGui", {
+		Name = "NovaHubUI", ResetOnSpawn = false, IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999,
+	})
+	local parented = false
+	if typeof(gethui) == "function" then
+		parented = pcall(function() gui.Parent = gethui() end) and gui.Parent ~= nil
+	end
+	if not parented then
+		parented = pcall(function() gui.Parent = CoreGui end) and gui.Parent ~= nil
+	end
+	if not parented then
+		gui.Parent = player:WaitForChild("PlayerGui")
+	end
+	netGui = gui
+
+	local main = new("Frame", {
+		Name = "Main", Size = UDim2.fromOffset(W, H),
+		Position = UDim2.new(0.5, -W / 2, 0.5, -H / 2),
+		BackgroundColor3 = C.window, BorderSizePixel = 0,
+	}, gui)
+	table.insert(registeredFrames, main)
+	stroke(main, C.border)
+
+	local titleBar = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1, BorderSizePixel = 0,
+	}, main)
+	label(titleBar, opts.Name or "NETsourcesgg Hub", {
+		Size = UDim2.new(1, -40, 1, 0), Position = UDim2.fromOffset(10, 0), TextColor3 = C.text,
+	})
+	local closeBtn = new("TextButton", {
+		Text = "x", Font = FONT, TextSize = 16, TextColor3 = C.text, AutoButtonColor = false,
+		BackgroundTransparency = 1, Size = UDim2.fromOffset(28, 28),
+		Position = UDim2.new(1, -28, 0, 0),
+	}, titleBar)
+	closeBtn.MouseEnter:Connect(function() closeBtn.TextColor3 = C.dim end)
+	closeBtn.MouseLeave:Connect(function() closeBtn.TextColor3 = C.text end)
+	
+	new("Frame", {
+		Size = UDim2.new(1, 0, 0, 1), Position = UDim2.fromOffset(0, 28),
+		BackgroundColor3 = C.border, BorderSizePixel = 0,
+	}, main)
+
+	local tabBar = new("Frame", {
+		Size = UDim2.new(1, -16, 0, 24), Position = UDim2.fromOffset(8, 35),
+		BackgroundTransparency = 1,
+	}, main)
+	new("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4),
+		SortOrder = BY_ORDER,
+	}, tabBar)
+
+	local pages = new("Frame", {
+		Name = "PagesContainer",
+		Size = UDim2.new(1, -16, 1, -72), Position = UDim2.fromOffset(8, 64),
+		BackgroundTransparency = 1, ClipsDescendants = true,
+	}, main)
+	stroke(pages, C.border)
+
+	local dragging, dragStart, startPos = false, nil, nil
+	titleBar.InputBegan:Connect(function(input)
+		if isPress(input) then
+			dragging, dragStart, startPos = true, input.Position, main.Position
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and isMove(input) then
+			local d = input.Position - dragStart
+			main.Position = UDim2.new(
+				startPos.X.Scale, startPos.X.Offset + d.X,
+				startPos.Y.Scale, startPos.Y.Offset + d.Y)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if isPress(input) then dragging = false end
+	end)
+
+	closeBtn.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
+	-- Toggle mapped to the N key
+	UserInputService.InputBegan:Connect(function(input)
+		if input.KeyCode == Enum.KeyCode.N and not UserInputService:GetFocusedTextBox() then
+			main.Visible = not main.Visible
+		end
+	end)
+
+	notifHolder = new("Frame", {
+		Size = UDim2.new(0, 300, 0, 0), AutomaticSize = AUTO_Y, AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -12, 1, -12), BackgroundTransparency = 1,
+	}, gui)
+	new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = BY_ORDER }, notifHolder)
+
+	local Window = { _tabs = {} }
+
+	function Window:CreateTab(name, _icon)
+		local tab = {}
+
+		local textW = TextService:GetTextSize(name, TSIZE, FONT, Vector2.new(1000, 100)).X
+		local btn = new("TextButton", {
+			Text = name, Font = FONT, TextSize = TSIZE, TextColor3 = C.dim, AutoButtonColor = false,
+			BackgroundTransparency = 1, BorderSizePixel = 0,
+			Size = UDim2.fromOffset(textW + 10, 22), LayoutOrder = #Window._tabs + 1,
+		}, tabBar)
+		stroke(btn, C.border)
+
+		local page = new("ScrollingFrame", {
+			Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0,
+			ScrollBarThickness = 2, ScrollBarImageColor3 = C.accent,
+			CanvasSize = UDim2.new(), Visible = false,
+		}, pages)
+		local contentCol = new("Frame", {
+			Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1,
+		}, page)
+		new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = BY_ORDER }, contentCol)
+		new("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), PaddingTop = UDim.new(0, 6) }, contentCol)
+
+		local function fitCanvas()
+			page.CanvasSize = UDim2.fromOffset(0, contentCol.AbsoluteSize.Y + 12)
+		end
+		contentCol:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitCanvas)
+
+		tab._set = function(on)
+			page.Visible = on
+			btn.BackgroundColor3 = on and C.hover or C.window
+			btn.TextColor3 = on and C.text or C.dim
+		end
+		btn.MouseButton1Click:Connect(function()
+			for _, t in ipairs(Window._tabs) do t._set(t == tab) end
+		end)
+		table.insert(Window._tabs, tab)
+		if #Window._tabs == 1 then tab._set(true) end
+
+		local current
+
+		local function newGroup(title)
+			local box = new("Frame", {
+				Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y,
+				BackgroundColor3 = C.panel, BorderSizePixel = 0,
+				LayoutOrder = #contentCol:GetChildren(),
+			}, contentCol)
+			table.insert(registeredFrames, box)
+			stroke(box, C.border)
+			new("UIListLayout", { SortOrder = BY_ORDER }, box)
+			local head = label(box, title, {
+				Size = UDim2.new(1, 0, 0, 20), LayoutOrder = 1, TextTruncate = Enum.TextTruncate.AtEnd,
+				TextColor3 = C.text,
+			})
+			new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, head)
+			local content = new("Frame", {
+				Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y,
+				BackgroundTransparency = 1, LayoutOrder = 2,
+			}, box)
+			new("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = BY_ORDER }, content)
+			new("UIPadding", {
+				PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8),
+			}, content)
+			current = content
+		end
+
+		local function add(height)
+			if not current then newGroup(name) end
+			return current
+		end
+
+		function tab:CreateSection(title)
+			newGroup(tostring(title))
+		end
+
+		function tab:CreateLabel(text)
+			text = tostring(text)
+			local parent = add(14)
+			local l = label(parent, text, {
+				Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, TextWrapped = true,
+				TextColor3 = C.dim, TextYAlignment = Enum.TextYAlignment.Top,
+			})
+			return { Set = function(_, t) l.Text = tostring(t) end }
+		end
+
+		function tab:CreateToggle(o)
+			local parent = add(22)
+			local value = o.CurrentValue and true or false
+			local row = new("TextButton", {
+				Text = "", AutoButtonColor = false, BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 16),
+			}, parent)
+			local box = new("Frame", {
+				Size = UDim2.fromOffset(12, 12), Position = UDim2.fromOffset(0, 2),
+				BackgroundColor3 = C.item, BorderSizePixel = 0,
+			}, row)
+			table.insert(registeredFrames, box)
+			stroke(box, C.border)
+			label(row, o.Name, { Position = UDim2.fromOffset(20, 0), Size = UDim2.new(1, -20, 1, 0) })
+			local function render() 
+				box.BackgroundColor3 = value and C.accent or C.item 
+			end
+			render()
+			row.MouseButton1Click:Connect(function()
+				value = not value
+				render()
+				fire(o.Callback, value)
+			end)
+			return {
+				Set = function(_, v)
+					value = v and true or false
+					render()
+					fire(o.Callback, value)
+				end,
+			}
+		end
+
+		function tab:CreateSlider(o)
+			local parent = add(38)
+			local lo, hi = o.Range[1], o.Range[2]
+			local inc = o.Increment or 1
+			local suffix = o.Suffix or ""
+			local value = math.clamp(o.CurrentValue or lo, lo, hi)
+			local decimals, t = 0, inc
+			while t % 1 ~= 0 and decimals < 3 do
+				t = t * 10
+				decimals = decimals + 1
+			end
+			local pattern = "%." .. decimals .. "f"
+
+			local holder = new("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1 }, parent)
+			label(holder, o.Name, { Size = UDim2.new(1, 0, 0, 14) })
+			local bar = new("TextButton", {
+				Text = "", AutoButtonColor = false, Position = UDim2.fromOffset(0, 16),
+				Size = UDim2.new(1, 0, 0, 14), BackgroundColor3 = C.item, BorderSizePixel = 0,
+			}, holder)
+			table.insert(registeredFrames, bar)
+			stroke(bar, C.border)
+			local fill = new("Frame", {
+				Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.accent, BorderSizePixel = 0,
+			}, bar)
+			local txt = label(bar, "", { 
+				Size = UDim2.fromScale(1, 1), 
+				TextXAlignment = CENTER, 
+				ZIndex = 2, 
+				TextColor3 = Color3.new(1, 1, 1) 
+			})
+
+			local function render()
+				fill.Size = UDim2.fromScale((value - lo) / (hi - lo), 1)
+				txt.Text = string.format(pattern, value) .. suffix
+			end
+			render()
+
+			local function setFromX(x)
+				local rel = math.clamp((x - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1)
+				local v = lo + rel * (hi - lo)
+				v = lo + math.floor((v - lo) / inc + 0.5) * inc
+				v = tonumber(string.format(pattern, math.clamp(v, lo, hi)))
+				if v ~= value then
+					value = v
+					render()
+					fire(o.Callback, value)
+				end
+			end
+			local sliding = false
+			bar.InputBegan:Connect(function(input)
+				if isPress(input) then
+					sliding = true
+					setFromX(input.Position.X)
+				end
+			end)
+			UserInputService.InputChanged:Connect(function(input)
+				if sliding and isMove(input) then setFromX(input.Position.X) end
+			end)
+			UserInputService.InputEnded:Connect(function(input)
+				if isPress(input) then sliding = false end
+			end)
+			return {
+				Set = function(_, v)
+					value = math.clamp(tonumber(v) or lo, lo, hi)
+					render()
+					fire(o.Callback, value)
+				end,
+			}
+		end
+
+		function tab:CreateButton(o)
+			local parent = add(24)
+			local b = new("TextButton", {
+				Text = o.Name, Font = FONT, TextSize = TSIZE, TextColor3 = C.text, AutoButtonColor = false,
+				BackgroundColor3 = C.item, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 20),
+			}, parent)
+			table.insert(registeredFrames, b)
+			local s = stroke(b, C.border)
+			b.MouseEnter:Connect(function() b.BackgroundColor3 = C.hover end)
+			b.MouseLeave:Connect(function() b.BackgroundColor3 = C.item s.Color = C.border end)
+			b.MouseButton1Down:Connect(function() s.Color = C.text end)
+			b.MouseButton1Up:Connect(function() s.Color = C.border end)
+			b.MouseButton1Click:Connect(function() fire(o.Callback) end)
+			return { Set = function(_, t2) b.Text = tostring(t2) end }
+		end
+
+		function tab:CreateDropdown(o)
+			local parent = add(42)
+			local options = o.Options or {}
+			local selected = type(o.CurrentOption) == "table" and o.CurrentOption[1] or nil
+			local dd = {}
+
+			local holder = new("Frame", {
+				Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1,
+			}, parent)
+			new("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = BY_ORDER }, holder)
+			label(holder, o.Name, { Size = UDim2.new(1, 0, 0, 14), LayoutOrder = 1 })
+			local head = new("TextButton", {
+				Text = "", AutoButtonColor = false, BackgroundColor3 = C.item, BorderSizePixel = 0,
+				Size = UDim2.new(1, 0, 0, 18), LayoutOrder = 2,
+			}, holder)
+			table.insert(registeredFrames, head)
+			stroke(head, C.border)
+			local shown = label(head, selected and tostring(selected) or "--", {
+				Size = UDim2.new(1, -22, 1, 0), Position = UDim2.fromOffset(6, 0),
+				TextTruncate = Enum.TextTruncate.AtEnd,
+			})
+			local arrow = label(head, "v", {
+				Size = UDim2.fromOffset(16, 18), Position = UDim2.new(1, -18, 0, 0),
+				TextXAlignment = CENTER, TextColor3 = C.dim,
+			})
+			local list = new("ScrollingFrame", {
+				LayoutOrder = 3, Size = UDim2.new(1, 0, 0, 18), BackgroundColor3 = C.item, BorderSizePixel = 0,
+				ScrollBarThickness = 2, ScrollBarImageColor3 = C.accent, CanvasSize = UDim2.new(),
+				AutomaticCanvasSize = AUTO_Y, Visible = false,
+			}, holder)
+			table.insert(registeredFrames, list)
+			stroke(list, C.border)
+			new("UIListLayout", { SortOrder = BY_ORDER }, list)
+
+			local function setOpen(v)
+				list.Visible = v
+				arrow.Text = v and "^" or "v"
+			end
+
+			local function rebuild()
+				for _, ch in ipairs(list:GetChildren()) do
+					if ch:IsA("TextButton") then ch:Destroy() end
+				end
+				for i, opt in ipairs(options) do
+					local ob = new("TextButton", {
+						Text = tostring(opt), Font = FONT, TextSize = TSIZE, AutoButtonColor = false,
+						TextColor3 = (opt == selected) and C.accent or C.text, TextXAlignment = LEFT,
+						TextTruncate = Enum.TextTruncate.AtEnd, BackgroundColor3 = C.hover,
+						BackgroundTransparency = 1, BorderSizePixel = 0,
+						Size = UDim2.new(1, 0, 0, 18), LayoutOrder = i,
+					}, list)
+					new("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6) }, ob)
+					ob.MouseEnter:Connect(function() ob.BackgroundTransparency = 0 end)
+					ob.MouseLeave:Connect(function() ob.BackgroundTransparency = 1 end)
+					ob.MouseButton1Click:Connect(function()
+						selected = opt
+						shown.Text = tostring(opt)
+						setOpen(false)
+						fire(o.Callback, opt)
+						rebuild()
+					end)
+				end
+				list.Size = UDim2.new(1, 0, 0, math.max(1, math.min(#options, 6)) * 18)
+			end
+			rebuild()
+
+			head.MouseButton1Click:Connect(function()
+				if #options == 0 then return end
+				setOpen(not list.Visible)
+			end)
+
+			function dd:Refresh(newOptions)
+				options = newOptions or {}
+				selected = nil
+				shown.Text = "--"
+				setOpen(false)
+				rebuild()
+			end
+			function dd:Set(v)
+				if type(v) == "table" then v = v[1] end
+				selected = v
+				shown.Text = v ~= nil and tostring(v) or "--"
+				rebuild()
+				fire(o.Callback, v)
+			end
+			return dd
+		end
+
+		return tab
+	end
+
+	return Window
+end
+
+local function notify(title, content)
+	NetUI:Notify({ Title = title, Content = content, Duration = 5 })
+end
+
+local function firstOf(v)
+	return type(v) == "table" and v[1] or v
+end
+
+---------------------------------------------------------------------
+-- FEATURE IMPLEMENTATIONS (MAIN & ToH)
+---------------------------------------------------------------------
+local flyEnabled = false
+local flySpeed = 50
+local flyConnection
+
+local function toggleFly(state)
+	flyEnabled = state
+	if flyConnection then flyConnection:Disconnect() end
+	
+	if flyEnabled then
+		flyConnection = RunService.RenderStepped:Connect(function()
+			local char = player.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if hrp and hum then
+				hum.PlatformStand = true
+				local camCF = camera.CFrame
+				local moveDir = Vector3.new()
+				if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camCF.LookVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camCF.LookVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camCF.RightVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camCF.RightVector end
+				if moveDir.Magnitude > 0 then
+					hrp.Velocity = moveDir.Unit * flySpeed
+				else
+					hrp.Velocity = Vector3.new(0, 0, 0)
+				end
+			end
+		end)
+	else
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hum then hum.PlatformStand = false end
+		if hrp then hrp.Velocity = Vector3.new() end
+	end
+	notify("Main", "Fly is now " .. (state and "Enabled" or "Disabled"))
+end
+
+local infJumpEnabled = false
+UserInputService.JumpRequest:Connect(function()
+	if infJumpEnabled then
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum:ChangeState(Enum.HumanoidStateType.Jumping)
+		end
+	end
+end)
+
+local noclipEnabled = false
+local noclipConnection
+local function toggleNoclip(state)
+	noclipEnabled = state
+	if noclipConnection then noclipConnection:Disconnect() end
+	
+	if noclipEnabled then
+		noclipConnection = RunService.Stepped:Connect(function()
+			local char = player.Character
+			if char then
+				for _, part in ipairs(char:GetDescendants()) do
+					if part:IsA("BasePart") then
+						part.CanCollide = false
+					end
+				end
+			end
+		end)
+	end
+	notify("Main", "Noclip is now " .. (state and "Enabled" or "Disabled"))
+end
+
+local clickTpEnabled = false
+mouse.Button1Down:Connect(function()
+	if clickTpEnabled and not UserInputService:GetFocusedTextBox() then
+		local char = player.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp and mouse.Target then
+			hrp.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
+		end
+	end
+end)
+
+local speedEnabled = false
+local walkSpeedValue = 16
+RunService.RenderStepped:Connect(function()
+	if speedEnabled then
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.WalkSpeed = walkSpeedValue
+		end
+	end
+end)
+
+local fullbrightEnabled = false
+local originalAmbient = Lighting.Ambient
+local originalOutdoorAmbient = Lighting.OutdoorAmbient
+local originalBrightness = Lighting.Brightness
+local originalClockTime = Lighting.ClockTime
+local originalGlobalShadows = Lighting.GlobalShadows
+
+RunService.RenderStepped:Connect(function()
+	if fullbrightEnabled then
+		Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+		Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+		Lighting.Brightness = 2
+		Lighting.ClockTime = 14
+		Lighting.GlobalShadows = false
+	end
+end)
+
+local function toggleFullbright(state)
+	fullbrightEnabled = state
+	if not state then
+		Lighting.Ambient = originalAmbient
+		Lighting.OutdoorAmbient = originalOutdoorAmbient
+		Lighting.Brightness = originalBrightness
+		Lighting.ClockTime = originalClockTime
+		Lighting.GlobalShadows = originalGlobalShadows
+	end
+	notify("Main", "Fullbright is now " .. (state and "Enabled" or "Disabled"))
+end
+
+---------------------------------------------------------------------
+-- ToH HELPERS
+---------------------------------------------------------------------
+local function getFolderItems(path)
+	local items = {}
+	local current = ReplicatedStorage
+	for _, part in ipairs(path) do
+		current = current and current:FindFirstChild(part)
+	end
+	if current then
+		for _, child in ipairs(current:GetChildren()) do
+			table.insert(items, child.Name)
+		end
+	end
+	return items
+end
+
+local function getItemFromPath(path, name)
+	local current = ReplicatedStorage
+	for _, part in ipairs(path) do
+		current = current and current:FindFirstChild(part)
+	end
+	return current and current:FindFirstChild(name)
+end
+
+local gearsList = getFolderItems({"assets", "gears"})
+local summerGearsList = getFolderItems({"assets", "models", "summer2026", "rocktools"})
+local summerFolderItems = getFolderItems({"assets", "models", "summer2026"})
+for _, v in ipairs(summerFolderItems) do
+	if not table.find(summerGearsList, v) then table.insert(summerGearsList, v) end
+end
+
+local selectedGear = nil
+local selectedSummerGear = nil
+
+local function giveGear(name, isSummer)
+	if not name then return notify("ToH", "Select a gear first!") end
+	local path = isSummer and {"assets", "models", "summer2026", "rocktools"} or {"assets", "gears"}
+	local item = getItemFromPath(path, name)
+	if not item and isSummer then item = getItemFromPath({"assets", "models", "summer2026"}, name) end
+	if item then
+		local clone = item:Clone()
+		clone.Parent = player:FindFirstChild("Backpack") or player.Character
+		notify("ToH", "Given gear: " .. name)
+	else
+		notify("ToH", "Gear asset not found.")
+	end
+end
+
+local effectsList = getFolderItems({"assets", "effects"})
+local selectedAccessory = nil
+local selectedTrail = nil
+local selectedTorsoEffect = nil
+local allowedBillboards = {"uwu", "owo", "Sub to Pinkleaf", "Noob", "Dinnerbone", "Crossbones", "Creator", "Builder", "Admin", "Admin|Builder"}
+local selectedBillboard = nil
+
+local function applyAccessory(name)
+	if not name then return end
+	local item = getItemFromPath({"assets", "effects"}, name)
+	local char = player.Character
+	if item and char then item:Clone().Parent = char notify("ToH", "Applied accessory: " .. name) end
+end
+
+local function applyTrail(name)
+	if not name then return end
+	local item = getItemFromPath({"assets", "effects"}, name)
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if item and hrp then
+		local old = hrp:FindFirstChild("ToH_Trail")
+		if old then old:Destroy() end
+		local clone = item:Clone()
+		clone.Name = "ToH_Trail"
+		clone.Parent = hrp
+		notify("ToH", "Applied trail: " .. name)
+	end
+end
+
+local function applyTorsoEffect(name)
+	if not name then return end
+	local item = getItemFromPath({"assets", "effects"}, name)
+	local char = player.Character
+	if item and char then
+		local targetPart = name:lower():find("head") and char:FindFirstChild("Head") or (char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart"))
+		if targetPart then item:Clone().Parent = targetPart notify("ToH", "Applied effect to " .. targetPart.Name) end
+	end
+end
+
+local function applyBillboard(name)
+	if not name then return end
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		local old = hrp:FindFirstChild("ToH_BB")
+		if old then old:Destroy() end
+		local bb = Instance.new("BillboardGui")
+		bb.Name = "ToH_BB"
+		bb.Size = UDim2.fromOffset(120, 40)
+		bb.AlwaysOnTop = true
+		bb.Adornee = hrp
+		bb.StudsOffset = Vector3.new(0, 3, 0)
+		local lbl = Instance.new("TextLabel")
+		lbl.Size = UDim2.fromScale(1, 1)
+		lbl.BackgroundTransparency = 1
+		lbl.Font = FONT
+		lbl.TextSize = 14
+		lbl.TextColor3 = Color3.fromRGB(0, 102, 255)
+		lbl.Text = name
+		lbl.Parent = bb
+		bb.Parent = hrp
+		notify("ToH", "Applied Billboard: " .. name)
+	end
+end
+
+local function applyLevel(val)
+	local targetVal = tonumber(val) or 1
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if leaderstats then
+		for _, stat in ipairs(leaderstats:GetChildren()) do
+			local lname = stat.Name:lower()
+			if lname:find("level") or lname:find("stage") or lname:find("lvl") then
+				if stat:IsA("IntValue") or stat:IsA("NumberValue") then stat.Value = targetVal end
+			end
+		end
+	end
+	pcall(function()
+		local pg = player:FindFirstChild("PlayerGui")
+		local uiTarget = pg and pg:FindFirstChild("levels") or StarterGui:FindFirstChild("levels")
+		if uiTarget then
+			local frame = uiTarget:FindFirstChild("frame")
+			local lvlFolder = frame and frame:FindFirstChild("level")
+			local lvlElem = lvlFolder and lvlFolder:FindFirstChild("level")
+			if lvlElem then
+				if lvlElem:IsA("TextLabel") or lvlElem:IsA("TextBox") then lvlElem.Text = tostring(targetVal)
+				elseif lvlElem:IsA("IntValue") or lvlElem:IsA("NumberValue") then lvlElem.Value = targetVal end
+			end
+		end
+	end)
+	notify("ToH", "Level set to " .. targetVal)
+end
+
+---------------------------------------------------------------------
+-- UI CREATION (Main, ToH, MM2, PIGGY, Settings, Credits)
+---------------------------------------------------------------------
+local Window = NetUI:CreateWindow({ Name = "NETsourcesgg Hub" })
+
+-- TAB 1: MAIN
+local MainTab = Window:CreateTab("Main", 4483362458)
+MainTab:CreateSection("Movement & Physics")
+MainTab:CreateToggle({ Name = "Fly", CurrentValue = false, Callback = toggleFly })
+MainTab:CreateSlider({ Name = "Fly Speed", Range = { 10, 150 }, Increment = 5, Suffix = "", CurrentValue = 50, Callback = function(v) flySpeed = v end })
+MainTab:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Callback = function(v) infJumpEnabled = v notify("Main", "Infinite Jump " .. (v and "On" or "Off")) end })
+MainTab:CreateToggle({ Name = "Noclip", CurrentValue = false, Callback = toggleNoclip })
+MainTab:CreateSection("Utilities")
+MainTab:CreateToggle({ Name = "Click Teleport (LMB)", CurrentValue = false, Callback = function(v) clickTpEnabled = v notify("Main", "Click Teleport " .. (v and "On" or "Off")) end })
+MainTab:CreateToggle({ Name = "Speed Changer", CurrentValue = false, Callback = function(v) speedEnabled = v notify("Main", "Speed " .. (v and "On" or "Off")) end })
+MainTab:CreateSlider({ Name = "WalkSpeed Value", Range = { 0, 250 }, Increment = 5, Suffix = "", CurrentValue = 16, Callback = function(v) walkSpeedValue = v end })
+MainTab:CreateToggle({ Name = "Fullbright", CurrentValue = false, Callback = toggleFullbright })
+
+-- TAB 2: ToH
+local ToHTab = Window:CreateTab("ToH", 4483362458)
+ToHTab:CreateSection("Gear Spawner")
+ToHTab:CreateDropdown({ Name = "Gears", Options = gearsList, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedGear = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Give Gear", Callback = function() giveGear(selectedGear, false) end })
+ToHTab:CreateDropdown({ Name = "Event Gears (Summer2026)", Options = summerGearsList, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedSummerGear = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Give Event Gear", Callback = function() giveGear(selectedSummerGear, true) end })
+ToHTab:CreateSection("Customization & Effects")
+ToHTab:CreateDropdown({ Name = "Accessories", Options = effectsList, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedAccessory = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Equip Accessory", Callback = function() applyAccessory(selectedAccessory) end })
+ToHTab:CreateDropdown({ Name = "Trails", Options = effectsList, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedTrail = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Equip Trail", Callback = function() applyTrail(selectedTrail) end })
+ToHTab:CreateDropdown({ Name = "Torso/Head Effects", Options = effectsList, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedTorsoEffect = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Apply Torso/Head Effect", Callback = function() applyTorsoEffect(selectedTorsoEffect) end })
+ToHTab:CreateDropdown({ Name = "Billboard GUIs", Options = allowedBillboards, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedBillboard = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Apply Billboard GUI", Callback = function() applyBillboard(selectedBillboard) end })
+ToHTab:CreateSection("Level Progression")
+ToHTab:CreateSlider({ Name = "Target Level", Range = { 1, 100 }, Increment = 1, Suffix = "", CurrentValue = 1, Callback = applyLevel })
+
+-- TAB 3: MM2
+local MM2Tab = Window:CreateTab("MM2", 4483362458)
+MM2Tab:CreateSection("Farming & Visuals")
+MM2Tab:CreateToggle({ Name = "Auto-Farm Coins", CurrentValue = false, Callback = function(v) notify("MM2", "Auto-Farm " .. (v and "On" or "Off")) end })
+MM2Tab:CreateToggle({ Name = "Player Highlight", CurrentValue = false, Callback = function(v) notify("MM2", "Highlight " .. (v and "On" or "Off")) end })
+MM2Tab:CreateSection("Abilities")
+MM2Tab:CreateToggle({ Name = "Invisible (Ghost)", CurrentValue = false, Callback = function(v) notify("MM2", "Invisible " .. (v and "On" or "Off")) end })
+
+-- TAB 4: PIGGY
+local PiggyTab = Window:CreateTab("PIGGY", 4483362458)
+PiggyTab:CreateSection("ESP & Highlighters")
+PiggyTab:CreateToggle({ Name = "Bot/Piggy Highlighter", CurrentValue = false, Callback = function(v) notify("PIGGY", "Bot HL " .. (v and "On" or "Off")) end })
+PiggyTab:CreateToggle({ Name = "Traitor Highlight", CurrentValue = false, Callback = function(v) notify("PIGGY", "Traitor HL " .. (v and "On" or "Off")) end })
+PiggyTab:CreateToggle({ Name = "Item Highlighter (500s)", CurrentValue = false, Callback = function(v) notify("PIGGY", "Item HL " .. (v and "On" or "Off")) end })
+
+-- TAB 5: SETTINGS
+local SettingsTab = Window:CreateTab("Settings", 4483362458)
+SettingsTab:CreateSection("Theme Mode (Required: Dark or Light)")
+SettingsTab:CreateButton({
+	Name = "Dark Mode",
+	Callback = function()
+		activeThemeMode = "dark"
+		updateThemeColors()
+		notify("Settings", "Dark Mode applied")
+	end,
+})
+SettingsTab:CreateButton({
+	Name = "Light Mode",
+	Callback = function()
+		activeThemeMode = "light"
+		updateThemeColors()
+		notify("Settings", "Light Mode applied")
+	end,
+})
+
+SettingsTab:CreateSection("UIStroke Style (Required)")
+SettingsTab:CreateButton({
+	Name = "Sky (Normal Stroke)",
+	Callback = function()
+		activeStrokeMode = "sky"
+		updateThemeColors()
+		notify("Settings", "Sky stroke applied")
+	end,
+})
+SettingsTab:CreateButton({
+	Name = "Sunrise (Orange-Red Gradient)",
+	Callback = function()
+		activeStrokeMode = "sunrise"
+		updateThemeColors()
+		notify("Settings", "Sunrise stroke applied")
+	end,
+})
+SettingsTab:CreateButton({
+	Name = "Moonlit (Blue-Purple Gradient)",
+	Callback = function()
+		activeStrokeMode = "moonlit"
+		updateThemeColors()
+		notify("Settings", "Moonlit stroke applied")
+	end,
+})
+SettingsTab:CreateButton({
+	Name = "Apple (Red Stroke)",
+	Callback = function()
+		activeStrokeMode = "apple"
+		updateThemeColors()
+		notify("Settings", "Apple stroke applied")
+	end,
+})
+
+-- TAB 6: CREDITS
+local CreditsTab = Window:CreateTab("Credits", 4483362458)
+CreditsTab:CreateSection("Development Team")
+CreditsTab:CreateLabel("@lustisfirst on discord - UI Creation")
+CreditsTab:CreateLabel("@lustisfirst on discord - Coding + Scripting")
+
+updateThemeColors()
+notify("NETsourcesgg Hub", "Loaded successfully! Press [N] to toggle.")
