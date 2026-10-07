@@ -759,7 +759,7 @@ local function toggleFullbright(state)
 end
 
 ---------------------------------------------------------------------
--- ToH / TTOH & ASSET GIVERS
+-- ToH HELPERS & ASSETS
 ---------------------------------------------------------------------
 local function getFolderItems(path)
 	local items = {}
@@ -786,20 +786,120 @@ end
 local gearsList = getFolderItems({"assets", "gears"})
 if #gearsList == 0 then gearsList = getFolderItems({"Assets", "Gear"}) end
 
-local selectedGear = nil
+local summerGearsList = getFolderItems({"assets", "models", "summer2026", "rocktools"})
+local summerFolderItems = getFolderItems({"assets", "models", "summer2026"})
+for _, v in ipairs(summerFolderItems) do
+	if not table.find(summerGearsList, v) then table.insert(summerGearsList, v) end
+end
 
-local function giveGear(name)
+local effectsList = getFolderItems({"assets", "effects"})
+local allowedBillboards = {"uwu", "owo", "Sub to Pinkleaf", "Noob", "Dinnerbone", "Crossbones", "Creator", "Builder", "Admin", "Admin|Builder"}
+
+local selectedGear = nil
+local selectedSummerGear = nil
+local selectedAccessory = nil
+local selectedTrail = nil
+local selectedTorsoEffect = nil
+local selectedBillboard = nil
+
+local function giveGear(name, isSummer)
 	if not name then return notify("ToH", "Select a gear first!") end
-	local item = getItemFromPath({"assets", "gears"}, name)
+	local path = isSummer and {"assets", "models", "summer2026", "rocktools"} or {"assets", "gears"}
+	local item = getItemFromPath(path, name)
+	if not item and isSummer then item = getItemFromPath({"assets", "models", "summer2026"}, name) end
 	if not item then item = getItemFromPath({"Assets", "Gear"}, name) end
 	if item then
-		item:Clone().Parent = player:WaitForChild("Backpack")
+		item:Clone().Parent = player:FindFirstChild("Backpack") or player.Character
 		notify("ToH", "Given gear: " .. name)
 	else
 		notify("ToH", "Gear asset not found.")
 	end
 end
 
+local function applyAccessory(name)
+	if not name then return end
+	local item = getItemFromPath({"assets", "effects"}, name)
+	local char = player.Character
+	if item and char then item:Clone().Parent = char notify("ToH", "Applied accessory: " .. name) end
+end
+
+local function applyTrail(name)
+	if not name then return end
+	local item = getItemFromPath({"assets", "effects"}, name)
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if item and hrp then
+		local old = hrp:FindFirstChild("ToH_Trail")
+		if old then old:Destroy() end
+		local clone = item:Clone()
+		clone.Name = "ToH_Trail"
+		clone.Parent = hrp
+		notify("ToH", "Applied trail: " .. name)
+	end
+end
+
+local function applyTorsoEffect(name)
+	if not name then return end
+	local item = getItemFromPath({"assets", "effects"}, name)
+	local char = player.Character
+	if item and char then
+		local targetPart = name:lower():find("head") and char:FindFirstChild("Head") or (char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart"))
+		if targetPart then item:Clone().Parent = targetPart notify("ToH", "Applied effect to " .. targetPart.Name) end
+	end
+end
+
+local function applyBillboard(name)
+	if not name then return end
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		local old = hrp:FindFirstChild("ToH_BB")
+		if old then old:Destroy() end
+		local bb = Instance.new("BillboardGui")
+		bb.Name = "ToH_BB"
+		bb.Size = UDim2.fromOffset(120, 40)
+		bb.AlwaysOnTop = true
+		bb.Adornee = hrp
+		bb.StudsOffset = Vector3.new(0, 3, 0)
+		local lbl = Instance.new("TextLabel")
+		lbl.Size = UDim2.fromScale(1, 1)
+		lbl.BackgroundTransparency = 1
+		lbl.Font = FONT
+		lbl.TextSize = 14
+		lbl.TextColor3 = Color3.fromRGB(0, 102, 255)
+		lbl.Text = name
+		lbl.Parent = bb
+		bb.Parent = hrp
+		notify("ToH", "Applied Billboard: " .. name)
+	end
+end
+
+local function applyLevel(val)
+	local targetVal = tonumber(val) or 1
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if leaderstats then
+		for _, stat in ipairs(leaderstats:GetChildren()) do
+			local lname = stat.Name:lower()
+			if lname:find("level") or lname:find("stage") or lname:find("lvl") then
+				if stat:IsA("IntValue") or stat:IsA("NumberValue") then stat.Value = targetVal end
+			end
+		end
+	end
+	pcall(function()
+		local pg = player:FindFirstChild("PlayerGui")
+		local uiTarget = pg and pg:FindFirstChild("levels") or StarterGui:FindFirstChild("levels")
+		if uiTarget then
+			local frame = uiTarget:FindFirstChild("frame")
+			local lvlFolder = frame and frame:FindFirstChild("level")
+			local lvlElem = lvlFolder and lvlFolder:FindFirstChild("level")
+			if lvlElem then
+				if lvlElem:IsA("TextLabel") or lvlElem:IsA("TextBox") then lvlElem.Text = tostring(targetVal)
+				elseif lvlElem:IsA("IntValue") or lvlElem:IsA("NumberValue") then lvlElem.Value = targetVal end
+			end
+		end
+	end)
+	notify("ToH", "Level set to " .. targetVal)
+end
+
+-- TTOH Automation Routine
 local teleporting = false
 local cancelTTOH = false
 
@@ -890,7 +990,32 @@ ToHTab:CreateButton({ Name = "Cancel TTOH", Callback = function() cancelTTOH = t
 ToHTab:CreateSection("Gear Spawner")
 ToHTab:CreateDropdown({ Name = "Gears", Options = gearsList, CurrentOption = {}, MultipleOptions = false,
 	Callback = function(opt) selectedGear = firstOf(opt) end })
-ToHTab:CreateButton({ Name = "Give Selected Gear", Callback = function() giveGear(selectedGear) end })
+ToHTab:CreateButton({ Name = "Give Gear", Callback = function() giveGear(selectedGear, false) end })
+
+ToHTab:CreateDropdown({ Name = "Event Gears (Summer2026)", Options = summerGearsList, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedSummerGear = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Give Event Gear", Callback = function() giveGear(selectedSummerGear, true) end })
+
+ToHTab:CreateSection("Customization & Effects")
+ToHTab:CreateDropdown({ Name = "Accessories", Options = effectsList, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedAccessory = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Equip Accessory", Callback = function() applyAccessory(selectedAccessory) end })
+
+ToHTab:CreateDropdown({ Name = "Trails", Options = effectsList, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedTrail = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Equip Trail", Callback = function() applyTrail(selectedTrail) end })
+
+ToHTab:CreateDropdown({ Name = "Torso/Head Effects", Options = effectsList, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedTorsoEffect = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Apply Torso/Head Effect", Callback = function() applyTorsoEffect(selectedTorsoEffect) end })
+
+ToHTab:CreateDropdown({ Name = "Billboard GUIs", Options = allowedBillboards, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedBillboard = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Apply Billboard GUI", Callback = function() applyBillboard(selectedBillboard) end })
+
+ToHTab:CreateSection("Level Progression")
+ToHTab:CreateSlider({ Name = "Target Level", Range = { 1, 100 }, Increment = 1, CurrentValue = 1,
+	Callback = applyLevel })
 
 -- 3. SETTINGS TAB
 local SettingsTab = Window:CreateTab("Settings", 4483362458)
