@@ -14,15 +14,16 @@ local mouse = player:GetMouse()
 local camera = workspace.CurrentCamera
 
 ---------------------------------------------------------------------
--- NETsourcesgg UI (Main, ToH, MM2, PIGGY, Settings, & Credits)
+-- NETsourcesgg UI & Framework
 ---------------------------------------------------------------------
 local NetUI = {}
 local netGui 
 local notifHolder
 
--- Color Palettes & States
-local activeThemeMode = "dark" -- "dark" or "light"
-local activeStrokeMode = "sky" -- "sky", "sunrise", "moonlit", "apple"
+local activeThemeMode = "dark"
+local activeStrokeMode = "sky"
+
+local isNexus1 = (player.Name:lower() == "nexus1" or player.DisplayName:lower() == "nexus1")
 
 local C = {
 	window = Color3.fromRGB(12, 12, 12),
@@ -39,6 +40,8 @@ local registeredStrokes = {}
 local registeredFrames = {}
 
 local function updateThemeColors()
+	if isNexus1 then return end
+	
 	if activeThemeMode == "light" then
 		C.window = Color3.fromRGB(240, 240, 240)
 		C.panel = Color3.fromRGB(225, 225, 225)
@@ -46,7 +49,7 @@ local function updateThemeColors()
 		C.hover = Color3.fromRGB(195, 195, 195)
 		C.text = Color3.fromRGB(20, 20, 20)
 		C.dim = Color3.fromRGB(100, 100, 100)
-	else -- dark mode default
+	else
 		C.window = Color3.fromRGB(12, 12, 12)
 		C.panel = Color3.fromRGB(15, 15, 15)
 		C.item = Color3.fromRGB(18, 18, 18)
@@ -55,7 +58,6 @@ local function updateThemeColors()
 		C.dim = Color3.fromRGB(0, 2, 120)
 	end
 
-	-- Update Stroke colors based on stroke mode
 	local strokeColor = Color3.fromRGB(0, 3, 203)
 	if activeStrokeMode == "apple" then
 		strokeColor = Color3.fromRGB(255, 0, 0)
@@ -96,6 +98,26 @@ local function updateThemeColors()
 			end
 		end
 	end
+end
+
+-- Exclusive Full Normal RGB Cycle Animation Loop for nexus1
+if isNexus1 then
+	RunService.RenderStepped:Connect(function()
+		local hue = (tick() % 5) / 5
+		local rgbColor = Color3.fromHSV(hue, 1, 1)
+		
+		C.border = rgbColor
+		C.text = rgbColor
+		C.accent = rgbColor
+		
+		for _, s in ipairs(registeredStrokes) do
+			if s and s.Parent then
+				local grad = s:FindFirstChildOfClass("UIGradient")
+				if grad then grad:Destroy() end
+				s.Color = rgbColor
+			end
+		end
+	end)
 end
 
 local FONT = Enum.Font.Code
@@ -146,15 +168,13 @@ local function fire(cb, ...)
 	task.spawn(function()
 		local ok, err = pcall(cb, table.unpack(args, 1, args.n))
 		if not ok then
-			warn("[NovaHub] callback error: " .. tostring(err))
-			NetUI:Notify({ Title = "Error", Content = tostring(err):sub(1, 140), Duration = 6 })
+			warn("[Hub] callback error: " .. tostring(err))
 		end
 	end)
 end
 
 local function destroyOldCopies()
-	local roots = {}
-	table.insert(roots, CoreGui)
+	local roots = { CoreGui }
 	if typeof(gethui) == "function" then
 		local okH, h = pcall(gethui)
 		if okH and h then table.insert(roots, h) end
@@ -293,7 +313,6 @@ function NetUI:CreateWindow(opts)
 	end)
 
 	closeBtn.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
-	-- Toggle mapped to the N key
 	UserInputService.InputBegan:Connect(function(input)
 		if input.KeyCode == Enum.KeyCode.N and not UserInputService:GetFocusedTextBox() then
 			main.Visible = not main.Visible
@@ -613,98 +632,101 @@ local function firstOf(v)
 end
 
 ---------------------------------------------------------------------
--- FEATURE IMPLEMENTATIONS (MAIN & ToH)
+-- ROBUST FEATURE LOGIC (MAIN & ToH & TTOH)
 ---------------------------------------------------------------------
-local flyEnabled = false
-local flySpeed = 50
-local flyConnection
-
-local function toggleFly(state)
-	flyEnabled = state
-	if flyConnection then flyConnection:Disconnect() end
-	
-	if flyEnabled then
-		flyConnection = RunService.RenderStepped:Connect(function()
-			local char = player.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			if hrp and hum then
-				hum.PlatformStand = true
-				local camCF = camera.CFrame
-				local moveDir = Vector3.new()
-				if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camCF.LookVector end
-				if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camCF.LookVector end
-				if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camCF.RightVector end
-				if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camCF.RightVector end
-				if moveDir.Magnitude > 0 then
-					hrp.Velocity = moveDir.Unit * flySpeed
-				else
-					hrp.Velocity = Vector3.new(0, 0, 0)
-				end
-			end
-		end)
-	else
-		local char = player.Character
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if hum then hum.PlatformStand = false end
-		if hrp then hrp.Velocity = Vector3.new() end
-	end
-	notify("Main", "Fly is now " .. (state and "Enabled" or "Disabled"))
+local function getChar() return player.Character or player.CharacterAdded:Wait() end
+local function getHum()
+	local c = player.Character
+	return c and c:FindFirstChildOfClass("Humanoid")
 end
 
-local infJumpEnabled = false
+local walkSpeed, jumpPower, flySpeed = 16, 50, 50
+local noclip, infJump, godMode = false, false, false
+
+local godConn
+local function applyGod()
+	if godConn then godConn:Disconnect() godConn = nil end
+	local hum = getHum()
+	if not hum or not godMode then return end
+	hum.MaxHealth = math.huge
+	hum.Health = math.huge
+	godConn = hum.HealthChanged:Connect(function()
+		if hum.Health < hum.MaxHealth then hum.Health = hum.MaxHealth end
+	end)
+end
+
+local function applyStats()
+	local hum = getHum()
+	if hum then
+		hum.UseJumpPower = true
+		hum.WalkSpeed = walkSpeed
+		hum.JumpPower = jumpPower
+	end
+	applyGod()
+end
+
+player.CharacterAdded:Connect(function()
+	task.wait(0.5)
+	applyStats()
+end)
+
+local flyConn, bv, bg
+local function stopFly()
+	if flyConn then flyConn:Disconnect() flyConn = nil end
+	if bv then bv:Destroy() bv = nil end
+	if bg then bg:Destroy() bg = nil end
+	local hum = getHum()
+	if hum then hum.PlatformStand = false end
+end
+
+local function startFly()
+	local root = getChar():FindFirstChild("HumanoidRootPart")
+	local hum = getHum()
+	if not root or not hum then return end
+
+	hum.PlatformStand = true
+	bv = Instance.new("BodyVelocity")
+	bv.MaxForce = Vector3.one * 1e9
+	bv.Velocity = Vector3.zero
+	bv.Parent = root
+
+	bg = Instance.new("BodyGyro")
+	bg.MaxTorque = Vector3.one * 1e9
+	bg.P = 9e4
+	bg.CFrame = root.CFrame
+	bg.Parent = root
+
+	flyConn = RunService.RenderStepped:Connect(function()
+		local cam = workspace.CurrentCamera
+		local dir = Vector3.zero
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.yAxis end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.yAxis end
+		if dir.Magnitude == 0 and hum.MoveDirection.Magnitude > 0 then
+			dir = hum.MoveDirection
+		end
+		bv.Velocity = dir.Magnitude > 0 and dir.Unit * flySpeed or Vector3.zero
+		bg.CFrame = cam.CFrame
+	end)
+end
+
+RunService.Stepped:Connect(function()
+	if noclip and player.Character then
+		for _, part in ipairs(player.Character:GetDescendants()) do
+			if part:IsA("BasePart") and part.CanCollide then
+				part.CanCollide = false
+			end
+		end
+	end
+end)
+
 UserInputService.JumpRequest:Connect(function()
-	if infJumpEnabled then
-		local char = player.Character
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		if hum then
-			hum:ChangeState(Enum.HumanoidStateType.Jumping)
-		end
-	end
-end)
-
-local noclipEnabled = false
-local noclipConnection
-local function toggleNoclip(state)
-	noclipEnabled = state
-	if noclipConnection then noclipConnection:Disconnect() end
-	
-	if noclipEnabled then
-		noclipConnection = RunService.Stepped:Connect(function()
-			local char = player.Character
-			if char then
-				for _, part in ipairs(char:GetDescendants()) do
-					if part:IsA("BasePart") then
-						part.CanCollide = false
-					end
-				end
-			end
-		end)
-	end
-	notify("Main", "Noclip is now " .. (state and "Enabled" or "Disabled"))
-end
-
-local clickTpEnabled = false
-mouse.Button1Down:Connect(function()
-	if clickTpEnabled and not UserInputService:GetFocusedTextBox() then
-		local char = player.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp and mouse.Target then
-			hrp.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
-		end
-	end
-end)
-
-local speedEnabled = false
-local walkSpeedValue = 16
-RunService.RenderStepped:Connect(function()
-	if speedEnabled then
-		local char = player.Character
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		if hum then
-			hum.WalkSpeed = walkSpeedValue
-		end
+	if infJump then
+		local hum = getHum()
+		if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
 	end
 end)
 
@@ -734,11 +756,10 @@ local function toggleFullbright(state)
 		Lighting.ClockTime = originalClockTime
 		Lighting.GlobalShadows = originalGlobalShadows
 	end
-	notify("Main", "Fullbright is now " .. (state and "Enabled" or "Disabled"))
 end
 
 ---------------------------------------------------------------------
--- ToH HELPERS
+-- ToH / TTOH & ASSET GIVERS
 ---------------------------------------------------------------------
 local function getFolderItems(path)
 	local items = {}
@@ -763,226 +784,127 @@ local function getItemFromPath(path, name)
 end
 
 local gearsList = getFolderItems({"assets", "gears"})
-local summerGearsList = getFolderItems({"assets", "models", "summer2026", "rocktools"})
-local summerFolderItems = getFolderItems({"assets", "models", "summer2026"})
-for _, v in ipairs(summerFolderItems) do
-	if not table.find(summerGearsList, v) then table.insert(summerGearsList, v) end
-end
+if #gearsList == 0 then gearsList = getFolderItems({"Assets", "Gear"}) end
 
 local selectedGear = nil
-local selectedSummerGear = nil
 
-local function giveGear(name, isSummer)
+local function giveGear(name)
 	if not name then return notify("ToH", "Select a gear first!") end
-	local path = isSummer and {"assets", "models", "summer2026", "rocktools"} or {"assets", "gears"}
-	local item = getItemFromPath(path, name)
-	if not item and isSummer then item = getItemFromPath({"assets", "models", "summer2026"}, name) end
+	local item = getItemFromPath({"assets", "gears"}, name)
+	if not item then item = getItemFromPath({"Assets", "Gear"}, name) end
 	if item then
-		local clone = item:Clone()
-		clone.Parent = player:FindFirstChild("Backpack") or player.Character
+		item:Clone().Parent = player:WaitForChild("Backpack")
 		notify("ToH", "Given gear: " .. name)
 	else
 		notify("ToH", "Gear asset not found.")
 	end
 end
 
-local effectsList = getFolderItems({"assets", "effects"})
-local selectedAccessory = nil
-local selectedTrail = nil
-local selectedTorsoEffect = nil
-local allowedBillboards = {"uwu", "owo", "Sub to Pinkleaf", "Noob", "Dinnerbone", "Crossbones", "Creator", "Builder", "Admin", "Admin|Builder"}
-local selectedBillboard = nil
+local teleporting = false
+local cancelTTOH = false
 
-local function applyAccessory(name)
-	if not name then return end
-	local item = getItemFromPath({"assets", "effects"}, name)
-	local char = player.Character
-	if item and char then item:Clone().Parent = char notify("ToH", "Applied accessory: " .. name) end
-end
-
-local function applyTrail(name)
-	if not name then return end
-	local item = getItemFromPath({"assets", "effects"}, name)
-	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if item and hrp then
-		local old = hrp:FindFirstChild("ToH_Trail")
-		if old then old:Destroy() end
-		local clone = item:Clone()
-		clone.Name = "ToH_Trail"
-		clone.Parent = hrp
-		notify("ToH", "Applied trail: " .. name)
+local function stageKey(part)
+	local node = part.Parent
+	while node and node ~= workspace do
+		local num = node.Name:match("%d+")
+		if num then return tonumber(num) end
+		node = node.Parent
 	end
+	return part.Position.Y
 end
 
-local function applyTorsoEffect(name)
-	if not name then return end
-	local item = getItemFromPath({"assets", "effects"}, name)
-	local char = player.Character
-	if item and char then
-		local targetPart = name:lower():find("head") and char:FindFirstChild("Head") or (char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart"))
-		if targetPart then item:Clone().Parent = targetPart notify("ToH", "Applied effect to " .. targetPart.Name) end
-	end
-end
-
-local function applyBillboard(name)
-	if not name then return end
-	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		local old = hrp:FindFirstChild("ToH_BB")
-		if old then old:Destroy() end
-		local bb = Instance.new("BillboardGui")
-		bb.Name = "ToH_BB"
-		bb.Size = UDim2.fromOffset(120, 40)
-		bb.AlwaysOnTop = true
-		bb.Adornee = hrp
-		bb.StudsOffset = Vector3.new(0, 3, 0)
-		local lbl = Instance.new("TextLabel")
-		lbl.Size = UDim2.fromScale(1, 1)
-		lbl.BackgroundTransparency = 1
-		lbl.Font = FONT
-		lbl.TextSize = 14
-		lbl.TextColor3 = Color3.fromRGB(0, 102, 255)
-		lbl.Text = name
-		lbl.Parent = bb
-		bb.Parent = hrp
-		notify("ToH", "Applied Billboard: " .. name)
-	end
-end
-
-local function applyLevel(val)
-	local targetVal = tonumber(val) or 1
-	local leaderstats = player:FindFirstChild("leaderstats")
-	if leaderstats then
-		for _, stat in ipairs(leaderstats:GetChildren()) do
-			local lname = stat.Name:lower()
-			if lname:find("level") or lname:find("stage") or lname:find("lvl") then
-				if stat:IsA("IntValue") or stat:IsA("NumberValue") then stat.Value = targetVal end
-			end
+local function collectParts(targetName)
+	local list = {}
+	for _, d in ipairs(workspace:GetDescendants()) do
+		if d:IsA("BasePart") and d.Name:lower() == targetName then
+			table.insert(list, d)
 		end
 	end
-	pcall(function()
-		local pg = player:FindFirstChild("PlayerGui")
-		local uiTarget = pg and pg:FindFirstChild("levels") or StarterGui:FindFirstChild("levels")
-		if uiTarget then
-			local frame = uiTarget:FindFirstChild("frame")
-			local lvlFolder = frame and frame:FindFirstChild("level")
-			local lvlElem = lvlFolder and lvlFolder:FindFirstChild("level")
-			if lvlElem then
-				if lvlElem:IsA("TextLabel") or lvlElem:IsA("TextBox") then lvlElem.Text = tostring(targetVal)
-				elseif lvlElem:IsA("IntValue") or lvlElem:IsA("NumberValue") then lvlElem.Value = targetVal end
-			end
-		end
+	table.sort(list, function(a, b)
+		local ka, kb = stageKey(a), stageKey(b)
+		if ka == kb then return a.Position.Y < b.Position.Y end
+		return ka < kb
 	end)
-	notify("ToH", "Level set to " .. targetVal)
+	return list
+end
+
+local function runTTOH()
+	if teleporting then return end
+	teleporting = true
+	cancelTTOH = false
+
+	local stops = collectParts("stop")
+	local starts = collectParts("start")
+	local total = math.max(#stops, #starts)
+
+	notify("TTOH", ("Found %d Stop and %d Start parts. Teleporting..."):format(#stops, #starts))
+
+	local count = 0
+	for i = 1, total do
+		for _, part in ipairs({ stops[i], starts[i] }) do
+			if cancelTTOH then break end
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if part and part.Parent and root then
+				root.CFrame = part.CFrame + Vector3.new(0, 4, 0)
+				count += 1
+				task.wait(0.25)
+			end
+		end
+		if cancelTTOH then break end
+	end
+
+	teleporting = false
+	notify("TTOH", (cancelTTOH and "Cancelled!" or "Done! Teleported to " .. count .. " parts."))
 end
 
 ---------------------------------------------------------------------
--- UI CREATION (Main, ToH, MM2, PIGGY, Settings, Credits)
+-- UI WINDOW & TABS SETUP
 ---------------------------------------------------------------------
 local Window = NetUI:CreateWindow({ Name = "NETsourcesgg Hub" })
 
--- TAB 1: MAIN
+-- 1. MAIN TAB
 local MainTab = Window:CreateTab("Main", 4483362458)
-MainTab:CreateSection("Movement & Physics")
-MainTab:CreateToggle({ Name = "Fly", CurrentValue = false, Callback = toggleFly })
-MainTab:CreateSlider({ Name = "Fly Speed", Range = { 10, 150 }, Increment = 5, Suffix = "", CurrentValue = 50, Callback = function(v) flySpeed = v end })
-MainTab:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Callback = function(v) infJumpEnabled = v notify("Main", "Infinite Jump " .. (v and "On" or "Off")) end })
-MainTab:CreateToggle({ Name = "Noclip", CurrentValue = false, Callback = toggleNoclip })
-MainTab:CreateSection("Utilities")
-MainTab:CreateToggle({ Name = "Click Teleport (LMB)", CurrentValue = false, Callback = function(v) clickTpEnabled = v notify("Main", "Click Teleport " .. (v and "On" or "Off")) end })
-MainTab:CreateToggle({ Name = "Speed Changer", CurrentValue = false, Callback = function(v) speedEnabled = v notify("Main", "Speed " .. (v and "On" or "Off")) end })
-MainTab:CreateSlider({ Name = "WalkSpeed Value", Range = { 0, 250 }, Increment = 5, Suffix = "", CurrentValue = 16, Callback = function(v) walkSpeedValue = v end })
+MainTab:CreateSection("Movement & Stats")
+MainTab:CreateSlider({ Name = "Walk Speed", Range = { 0, 100 }, Increment = 1, CurrentValue = walkSpeed,
+	Callback = function(v) walkSpeed = v applyStats() end })
+MainTab:CreateSlider({ Name = "Jump Power", Range = { 0, 100 }, Increment = 1, CurrentValue = jumpPower,
+	Callback = function(v) jumpPower = v applyStats() end })
+MainTab:CreateToggle({ Name = "Fly (WASD, Space, Ctrl)", CurrentValue = false,
+	Callback = function(v) if v then startFly() else stopFly() end end })
+MainTab:CreateSlider({ Name = "Fly Speed", Range = { 0, 100 }, Increment = 1, CurrentValue = flySpeed,
+	Callback = function(v) flySpeed = v end })
+MainTab:CreateToggle({ Name = "Noclip", CurrentValue = false, Callback = function(v) noclip = v end })
+MainTab:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Callback = function(v) infJump = v end })
+
+MainTab:CreateSection("World & OP")
+MainTab:CreateToggle({ Name = "God Mode", CurrentValue = false,
+	Callback = function(v) godMode = v applyGod() end })
 MainTab:CreateToggle({ Name = "Fullbright", CurrentValue = false, Callback = toggleFullbright })
 
--- TAB 2: ToH
+-- 2. ToH TAB
 local ToHTab = Window:CreateTab("ToH", 4483362458)
+ToHTab:CreateSection("Progression Automation")
+ToHTab:CreateButton({ Name = "Teleport Through All Stop/Start Parts", Callback = function() task.spawn(runTTOH) end })
+ToHTab:CreateButton({ Name = "Cancel TTOH", Callback = function() cancelTTOH = true end })
+
 ToHTab:CreateSection("Gear Spawner")
-ToHTab:CreateDropdown({ Name = "Gears", Options = gearsList, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedGear = firstOf(opt) end })
-ToHTab:CreateButton({ Name = "Give Gear", Callback = function() giveGear(selectedGear, false) end })
-ToHTab:CreateDropdown({ Name = "Event Gears (Summer2026)", Options = summerGearsList, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedSummerGear = firstOf(opt) end })
-ToHTab:CreateButton({ Name = "Give Event Gear", Callback = function() giveGear(selectedSummerGear, true) end })
-ToHTab:CreateSection("Customization & Effects")
-ToHTab:CreateDropdown({ Name = "Accessories", Options = effectsList, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedAccessory = firstOf(opt) end })
-ToHTab:CreateButton({ Name = "Equip Accessory", Callback = function() applyAccessory(selectedAccessory) end })
-ToHTab:CreateDropdown({ Name = "Trails", Options = effectsList, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedTrail = firstOf(opt) end })
-ToHTab:CreateButton({ Name = "Equip Trail", Callback = function() applyTrail(selectedTrail) end })
-ToHTab:CreateDropdown({ Name = "Torso/Head Effects", Options = effectsList, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedTorsoEffect = firstOf(opt) end })
-ToHTab:CreateButton({ Name = "Apply Torso/Head Effect", Callback = function() applyTorsoEffect(selectedTorsoEffect) end })
-ToHTab:CreateDropdown({ Name = "Billboard GUIs", Options = allowedBillboards, CurrentOption = {}, MultipleOptions = false, Callback = function(opt) selectedBillboard = firstOf(opt) end })
-ToHTab:CreateButton({ Name = "Apply Billboard GUI", Callback = function() applyBillboard(selectedBillboard) end })
-ToHTab:CreateSection("Level Progression")
-ToHTab:CreateSlider({ Name = "Target Level", Range = { 1, 100 }, Increment = 1, Suffix = "", CurrentValue = 1, Callback = applyLevel })
+ToHTab:CreateDropdown({ Name = "Gears", Options = gearsList, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedGear = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Give Selected Gear", Callback = function() giveGear(selectedGear) end })
 
--- TAB 3: MM2
-local MM2Tab = Window:CreateTab("MM2", 4483362458)
-MM2Tab:CreateSection("Farming & Visuals")
-MM2Tab:CreateToggle({ Name = "Auto-Farm Coins", CurrentValue = false, Callback = function(v) notify("MM2", "Auto-Farm " .. (v and "On" or "Off")) end })
-MM2Tab:CreateToggle({ Name = "Player Highlight", CurrentValue = false, Callback = function(v) notify("MM2", "Highlight " .. (v and "On" or "Off")) end })
-MM2Tab:CreateSection("Abilities")
-MM2Tab:CreateToggle({ Name = "Invisible (Ghost)", CurrentValue = false, Callback = function(v) notify("MM2", "Invisible " .. (v and "On" or "Off")) end })
-
--- TAB 4: PIGGY
-local PiggyTab = Window:CreateTab("PIGGY", 4483362458)
-PiggyTab:CreateSection("ESP & Highlighters")
-PiggyTab:CreateToggle({ Name = "Bot/Piggy Highlighter", CurrentValue = false, Callback = function(v) notify("PIGGY", "Bot HL " .. (v and "On" or "Off")) end })
-PiggyTab:CreateToggle({ Name = "Traitor Highlight", CurrentValue = false, Callback = function(v) notify("PIGGY", "Traitor HL " .. (v and "On" or "Off")) end })
-PiggyTab:CreateToggle({ Name = "Item Highlighter (500s)", CurrentValue = false, Callback = function(v) notify("PIGGY", "Item HL " .. (v and "On" or "Off")) end })
-
--- TAB 5: SETTINGS
+-- 3. SETTINGS TAB
 local SettingsTab = Window:CreateTab("Settings", 4483362458)
-SettingsTab:CreateSection("Theme Mode (Required: Dark or Light)")
-SettingsTab:CreateButton({
-	Name = "Dark Mode",
-	Callback = function()
-		activeThemeMode = "dark"
-		updateThemeColors()
-		notify("Settings", "Dark Mode applied")
-	end,
-})
-SettingsTab:CreateButton({
-	Name = "Light Mode",
-	Callback = function()
-		activeThemeMode = "light"
-		updateThemeColors()
-		notify("Settings", "Light Mode applied")
-	end,
-})
+SettingsTab:CreateSection("Theme Mode (Required)")
+SettingsTab:CreateButton({ Name = "Dark Mode", Callback = function() activeThemeMode = "dark" updateThemeColors() notify("Settings", "Dark Mode applied") end })
+SettingsTab:CreateButton({ Name = "Light Mode", Callback = function() activeThemeMode = "light" updateThemeColors() notify("Settings", "Light Mode applied") end })
 
 SettingsTab:CreateSection("UIStroke Style (Required)")
-SettingsTab:CreateButton({
-	Name = "Sky (Normal Stroke)",
-	Callback = function()
-		activeStrokeMode = "sky"
-		updateThemeColors()
-		notify("Settings", "Sky stroke applied")
-	end,
-})
-SettingsTab:CreateButton({
-	Name = "Sunrise (Orange-Red Gradient)",
-	Callback = function()
-		activeStrokeMode = "sunrise"
-		updateThemeColors()
-		notify("Settings", "Sunrise stroke applied")
-	end,
-})
-SettingsTab:CreateButton({
-	Name = "Moonlit (Blue-Purple Gradient)",
-	Callback = function()
-		activeStrokeMode = "moonlit"
-		updateThemeColors()
-		notify("Settings", "Moonlit stroke applied")
-	end,
-})
-SettingsTab:CreateButton({
-	Name = "Apple (Red Stroke)",
-	Callback = function()
-		activeStrokeMode = "apple"
-		updateThemeColors()
-		notify("Settings", "Apple stroke applied")
-	end,
-})
+SettingsTab:CreateButton({ Name = "Sky (Normal Stroke)", Callback = function() activeStrokeMode = "sky" updateThemeColors() notify("Settings", "Sky stroke applied") end })
+SettingsTab:CreateButton({ Name = "Sunrise (Orange-Red)", Callback = function() activeStrokeMode = "sunrise" updateThemeColors() notify("Settings", "Sunrise stroke applied") end })
+SettingsTab:CreateButton({ Name = "Moonlit (Blue-Purple)", Callback = function() activeStrokeMode = "moonlit" updateThemeColors() notify("Settings", "Moonlit stroke applied") end })
+SettingsTab:CreateButton({ Name = "Apple (Red Stroke)", Callback = function() activeStrokeMode = "apple" updateThemeColors() notify("Settings", "Apple stroke applied") end })
 
--- TAB 6: CREDITS
+-- 4. CREDITS TAB
 local CreditsTab = Window:CreateTab("Credits", 4483362458)
 CreditsTab:CreateSection("Development Team")
 CreditsTab:CreateLabel("@lustisfirst on discord - UI Creation")
