@@ -596,6 +596,9 @@ function NetUI:CreateWindow(opts)
 			rebuild()
 
 			head.MouseButton1Click:Connect(function()
+				if type(o.DynamicOptions) == "function" then
+					options = o.DynamicOptions()
+				end
 				if #options == 0 then return end
 				setOpen(not list.Visible)
 			end)
@@ -759,12 +762,12 @@ local function toggleFullbright(state)
 end
 
 ---------------------------------------------------------------------
--- ToH HELPERS & ASSETS
+-- ToH HELPERS & ASSETS (Robust Scanning)
 ---------------------------------------------------------------------
-local function getFolderItems(path)
+local function getFolderItems(pathTable)
 	local items = {}
 	local current = ReplicatedStorage
-	for _, part in ipairs(path) do
+	for _, part in ipairs(pathTable) do
 		current = current and current:FindFirstChild(part)
 	end
 	if current then
@@ -775,12 +778,16 @@ local function getFolderItems(path)
 	return items
 end
 
-local function getItemFromPath(path, name)
-	local current = ReplicatedStorage
-	for _, part in ipairs(path) do
-		current = current and current:FindFirstChild(part)
+local function findItemDeep(root, name)
+	if not root then return nil end
+	local direct = root:FindFirstChild(name)
+	if direct then return direct end
+	for _, child in ipairs(root:GetDescendants()) do
+		if child.Name:lower() == name:lower() then
+			return child
+		end
 	end
-	return current and current:FindFirstChild(name)
+	return nil
 end
 
 local gearsList = getFolderItems({"assets", "gears"})
@@ -793,7 +800,31 @@ for _, v in ipairs(summerFolderItems) do
 end
 
 local effectsList = getFolderItems({"assets", "effects"})
-local allowedBillboards = {"uwu", "owo", "Sub to Pinkleaf", "Noob", "Dinnerbone", "Crossbones", "Creator", "Builder", "Admin", "Admin|Builder"}
+if #effectsList == 0 then effectsList = getFolderItems({"Assets", "Effects"}) end
+
+-- Scan workspace/ReplicatedStorage for existing BillboardGuis dynamically
+local function getGameBillboards()
+	local names = {}
+	local seen = {}
+	local function scan(parent)
+		for _, v in ipairs(parent:GetDescendants()) do
+			if v:IsA("BillboardGui") then
+				if not seen[v.Name] then
+					seen[v.Name] = true
+					table.insert(names, v.Name)
+				end
+			end
+		end
+	end
+	scan(Workspace)
+	scan(ReplicatedStorage)
+	local pg = player:FindFirstChild("PlayerGui")
+	if pg then scan(pg) end
+	if #names == 0 then
+		table.insert(names, "DefaultBB")
+	end
+	return names
+end
 
 local selectedGear = nil
 local selectedSummerGear = nil
@@ -804,28 +835,45 @@ local selectedBillboard = nil
 
 local function giveGear(name, isSummer)
 	if not name then return notify("ToH", "Select a gear first!") end
-	local path = isSummer and {"assets", "models", "summer2026", "rocktools"} or {"assets", "gears"}
-	local item = getItemFromPath(path, name)
-	if not item and isSummer then item = getItemFromPath({"assets", "models", "summer2026"}, name) end
-	if not item then item = getItemFromPath({"Assets", "Gear"}, name) end
+	local assets = ReplicatedStorage:FindFirstChild("assets") or ReplicatedStorage:FindFirstChild("Assets")
+	local item = nil
+	if isSummer then
+		local summerRoot = assets and assets:FindFirstChild("models") and assets.models:FindFirstChild("summer2026")
+		item = findItemDeep(summerRoot, name)
+	else
+		local gearsRoot = assets and (assets:FindFirstChild("gears") or assets:FindFirstChild("Gear"))
+		item = findItemDeep(gearsRoot, name)
+	end
+	if not item then
+		item = findItemDeep(assets, name)
+	end
 	if item then
 		item:Clone().Parent = player:FindFirstChild("Backpack") or player.Character
-		notify("ToH", "Given gear: " .. name)
+		notify("ToH", "Given gear: " + name)
 	else
 		notify("ToH", "Gear asset not found.")
 	end
 end
 
 local function applyAccessory(name)
-	if not name then return end
-	local item = getItemFromPath({"assets", "effects"}, name)
+	if not name then return notify("ToH", "Select an accessory first!") end
+	local assets = ReplicatedStorage:FindFirstChild("assets") or ReplicatedStorage:FindFirstChild("Assets")
+	local effectsFolder = assets and (assets:FindFirstChild("effects") or assets:FindFirstChild("Effects"))
+	local item = findItemDeep(effectsFolder, name) or findItemDeep(assets, name)
 	local char = player.Character
-	if item and char then item:Clone().Parent = char notify("ToH", "Applied accessory: " .. name) end
+	if item and char then 
+		item:Clone().Parent = char 
+		notify("ToH", "Applied accessory: " .. name) 
+	else
+		notify("ToH", "Accessory asset not found.")
+	end
 end
 
 local function applyTrail(name)
-	if not name then return end
-	local item = getItemFromPath({"assets", "effects"}, name)
+	if not name then return notify("ToH", "Select a trail first!") end
+	local assets = ReplicatedStorage:FindFirstChild("assets") or ReplicatedStorage:FindFirstChild("Assets")
+	local effectsFolder = assets and (assets:FindFirstChild("effects") or assets:FindFirstChild("Effects"))
+	local item = findItemDeep(effectsFolder, name) or findItemDeep(assets, name)
 	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if item and hrp then
 		local old = hrp:FindFirstChild("ToH_Trail")
@@ -834,39 +882,65 @@ local function applyTrail(name)
 		clone.Name = "ToH_Trail"
 		clone.Parent = hrp
 		notify("ToH", "Applied trail: " .. name)
+	else
+		notify("ToH", "Trail asset not found.")
 	end
 end
 
 local function applyTorsoEffect(name)
-	if not name then return end
-	local item = getItemFromPath({"assets", "effects"}, name)
+	if not name then return notify("ToH", "Select an effect first!") end
+	local assets = ReplicatedStorage:FindFirstChild("assets") or ReplicatedStorage:FindFirstChild("Assets")
+	local effectsFolder = assets and (assets:FindFirstChild("effects") or assets:FindFirstChild("Effects"))
+	local item = findItemDeep(effectsFolder, name) or findItemDeep(assets, name)
 	local char = player.Character
 	if item and char then
 		local targetPart = name:lower():find("head") and char:FindFirstChild("Head") or (char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart"))
-		if targetPart then item:Clone().Parent = targetPart notify("ToH", "Applied effect to " .. targetPart.Name) end
+		if targetPart then 
+			item:Clone().Parent = targetPart 
+			notify("ToH", "Applied effect to " .. targetPart.Name) 
+		end
+	else
+		notify("ToH", "Effect asset not found.")
 	end
 end
 
 local function applyBillboard(name)
-	if not name then return end
+	if not name then return notify("ToH", "Select a Billboard first!") end
 	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if hrp then
 		local old = hrp:FindFirstChild("ToH_BB")
 		if old then old:Destroy() end
-		local bb = Instance.new("BillboardGui")
+		
+		-- Try to find existing template in game
+		local template = nil
+		for _, v in ipairs(Workspace:GetDescendants()) do
+			if v:IsA("BillboardGui") and v.Name == name then template = v break end
+		end
+		if not template then
+			for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
+				if v:IsA("BillboardGui") and v.Name == name then template = v break end
+			end
+		end
+
+		local bb
+		if template then
+			bb = template:Clone()
+		else
+			bb = Instance.new("BillboardGui")
+			bb.Size = UDim2.fromOffset(120, 40)
+			bb.AlwaysOnTop = true
+			local lbl = Instance.new("TextLabel")
+			lbl.Size = UDim2.fromScale(1, 1)
+			lbl.BackgroundTransparency = 1
+			lbl.Font = FONT
+			lbl.TextSize = 14
+			lbl.TextColor3 = Color3.fromRGB(0, 102, 255)
+			lbl.Text = name
+			lbl.Parent = bb
+		end
 		bb.Name = "ToH_BB"
-		bb.Size = UDim2.fromOffset(120, 40)
-		bb.AlwaysOnTop = true
 		bb.Adornee = hrp
 		bb.StudsOffset = Vector3.new(0, 3, 0)
-		local lbl = Instance.new("TextLabel")
-		lbl.Size = UDim2.fromScale(1, 1)
-		lbl.BackgroundTransparency = 1
-		lbl.Font = FONT
-		lbl.TextSize = 14
-		lbl.TextColor3 = Color3.fromRGB(0, 102, 255)
-		lbl.Text = name
-		lbl.Parent = bb
 		bb.Parent = hrp
 		notify("ToH", "Applied Billboard: " .. name)
 	end
@@ -1009,7 +1083,7 @@ ToHTab:CreateDropdown({ Name = "Torso/Head Effects", Options = effectsList, Curr
 	Callback = function(opt) selectedTorsoEffect = firstOf(opt) end })
 ToHTab:CreateButton({ Name = "Apply Torso/Head Effect", Callback = function() applyTorsoEffect(selectedTorsoEffect) end })
 
-ToHTab:CreateDropdown({ Name = "Billboard GUIs", Options = allowedBillboards, CurrentOption = {}, MultipleOptions = false,
+ToHTab:CreateDropdown({ Name = "Billboard GUIs", Options = getGameBillboards(), DynamicOptions = getGameBillboards, CurrentOption = {}, MultipleOptions = false,
 	Callback = function(opt) selectedBillboard = firstOf(opt) end })
 ToHTab:CreateButton({ Name = "Apply Billboard GUI", Callback = function() applyBillboard(selectedBillboard) end })
 
