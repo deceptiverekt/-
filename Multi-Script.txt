@@ -569,6 +569,9 @@ function NetUI:CreateWindow(opts)
 			end
 
 			local function rebuild()
+				if type(o.DynamicOptions) == "function" then
+					options = o.DynamicOptions()
+				end
 				for _, ch in ipairs(list:GetChildren()) do
 					if ch:IsA("TextButton") then ch:Destroy() end
 				end
@@ -762,9 +765,9 @@ local function toggleFullbright(state)
 end
 
 ---------------------------------------------------------------------
--- ToH HELPERS & ASSETS (Robust Scanning)
+-- ToH HELPERS & ASSETS (Filtered & Robust)
 ---------------------------------------------------------------------
-local function getFolderItems(pathTable)
+local function getFolderItems(pathTable, filterFunc)
 	local items = {}
 	local current = ReplicatedStorage
 	for _, part in ipairs(pathTable) do
@@ -772,7 +775,9 @@ local function getFolderItems(pathTable)
 	end
 	if current then
 		for _, child in ipairs(current:GetChildren()) do
-			table.insert(items, child.Name)
+			if not filterFunc or filterFunc(child.Name) then
+				table.insert(items, child.Name)
+			end
 		end
 	end
 	return items
@@ -799,10 +804,16 @@ for _, v in ipairs(summerFolderItems) do
 	if not table.find(summerGearsList, v) then table.insert(summerGearsList, v) end
 end
 
-local effectsList = getFolderItems({"assets", "effects"})
+-- Exclusive Filtered Lists
+local halosList = getFolderItems({"assets", "effects"}, function(name) return name:lower():find("halo") ~= nil end)
+if #halosList == 0 then halosList = getFolderItems({"Assets", "Effects"}, function(name) return name:lower():find("halo") ~= nil end) end
+
+local trailsList = getFolderItems({"assets", "effects"}, function(name) return name:lower():find("trail") ~= nil end)
+if #trailsList == 0 then trailsList = getFolderItems({"Assets", "Effects"}, function(name) return name:lower():find("trail") ~= nil end) end
+
+local effectsList = getFolderItems({"assets", "effects"}, function(name) return name:lower():find("halo") == nil and name:lower():find("trail") == nil end)
 if #effectsList == 0 then effectsList = getFolderItems({"Assets", "Effects"}) end
 
--- Scan workspace/ReplicatedStorage for existing BillboardGuis dynamically
 local function getGameBillboards()
 	local names = {}
 	local seen = {}
@@ -820,9 +831,7 @@ local function getGameBillboards()
 	scan(ReplicatedStorage)
 	local pg = player:FindFirstChild("PlayerGui")
 	if pg then scan(pg) end
-	if #names == 0 then
-		table.insert(names, "DefaultBB")
-	end
+	if #names == 0 then table.insert(names, "DefaultBB") end
 	return names
 end
 
@@ -832,6 +841,7 @@ local selectedAccessory = nil
 local selectedTrail = nil
 local selectedTorsoEffect = nil
 local selectedBillboard = nil
+local targetLevelValue = 1
 
 local function giveGear(name, isSummer)
 	if not name then return notify("ToH", "Select a gear first!") end
@@ -844,12 +854,10 @@ local function giveGear(name, isSummer)
 		local gearsRoot = assets and (assets:FindFirstChild("gears") or assets:FindFirstChild("Gear"))
 		item = findItemDeep(gearsRoot, name)
 	end
-	if not item then
-		item = findItemDeep(assets, name)
-	end
+	if not item then item = findItemDeep(assets, name) end
 	if item then
 		item:Clone().Parent = player:FindFirstChild("Backpack") or player.Character
-		notify("ToH", "Given gear: " + name)
+		notify("ToH", "Given gear: " .. name)
 	else
 		notify("ToH", "Gear asset not found.")
 	end
@@ -911,7 +919,6 @@ local function applyBillboard(name)
 		local old = hrp:FindFirstChild("ToH_BB")
 		if old then old:Destroy() end
 		
-		-- Try to find existing template in game
 		local template = nil
 		for _, v in ipairs(Workspace:GetDescendants()) do
 			if v:IsA("BillboardGui") and v.Name == name then template = v break end
@@ -942,12 +949,12 @@ local function applyBillboard(name)
 		bb.Adornee = hrp
 		bb.StudsOffset = Vector3.new(0, 3, 0)
 		bb.Parent = hrp
-		notify("ToH", "Applied Billboard: " .. name)
+		notify("ToH", "Applied Billboard to HumanoidRootPart: " .. name)
 	end
 end
 
-local function applyLevel(val)
-	local targetVal = tonumber(val) or 1
+local function setLevelLeaderstat()
+	local targetVal = targetLevelValue
 	local leaderstats = player:FindFirstChild("leaderstats")
 	if leaderstats then
 		for _, stat in ipairs(leaderstats:GetChildren()) do
@@ -956,7 +963,14 @@ local function applyLevel(val)
 				if stat:IsA("IntValue") or stat:IsA("NumberValue") then stat.Value = targetVal end
 			end
 		end
+		notify("ToH", "Leaderstat level set to " .. targetVal)
+	else
+		notify("ToH", "Leaderstats not found.")
 	end
+end
+
+local function setLevelUI()
+	local targetVal = targetLevelValue
 	pcall(function()
 		local pg = player:FindFirstChild("PlayerGui")
 		local uiTarget = pg and pg:FindFirstChild("levels") or StarterGui:FindFirstChild("levels")
@@ -967,10 +981,12 @@ local function applyLevel(val)
 			if lvlElem then
 				if lvlElem:IsA("TextLabel") or lvlElem:IsA("TextBox") then lvlElem.Text = tostring(targetVal)
 				elseif lvlElem:IsA("IntValue") or lvlElem:IsA("NumberValue") then lvlElem.Value = targetVal end
+				notify("ToH", "UI level set to " .. targetVal)
+				return
 			end
 		end
+		notify("ToH", "UI level element not found.")
 	end)
-	notify("ToH", "Level set to " .. targetVal)
 end
 
 -- TTOH Automation Routine
@@ -1071,11 +1087,11 @@ ToHTab:CreateDropdown({ Name = "Event Gears (Summer2026)", Options = summerGears
 ToHTab:CreateButton({ Name = "Give Event Gear", Callback = function() giveGear(selectedSummerGear, true) end })
 
 ToHTab:CreateSection("Customization & Effects")
-ToHTab:CreateDropdown({ Name = "Accessories", Options = effectsList, CurrentOption = {}, MultipleOptions = false,
+ToHTab:CreateDropdown({ Name = "Accessories (Halos)", Options = halosList, CurrentOption = {}, MultipleOptions = false,
 	Callback = function(opt) selectedAccessory = firstOf(opt) end })
 ToHTab:CreateButton({ Name = "Equip Accessory", Callback = function() applyAccessory(selectedAccessory) end })
 
-ToHTab:CreateDropdown({ Name = "Trails", Options = effectsList, CurrentOption = {}, MultipleOptions = false,
+ToHTab:CreateDropdown({ Name = "Trails", Options = trailsList, CurrentOption = {}, MultipleOptions = false,
 	Callback = function(opt) selectedTrail = firstOf(opt) end })
 ToHTab:CreateButton({ Name = "Equip Trail", Callback = function() applyTrail(selectedTrail) end })
 
@@ -1085,11 +1101,13 @@ ToHTab:CreateButton({ Name = "Apply Torso/Head Effect", Callback = function() ap
 
 ToHTab:CreateDropdown({ Name = "Billboard GUIs", Options = getGameBillboards(), DynamicOptions = getGameBillboards, CurrentOption = {}, MultipleOptions = false,
 	Callback = function(opt) selectedBillboard = firstOf(opt) end })
-ToHTab:CreateButton({ Name = "Apply Billboard GUI", Callback = function() applyBillboard(selectedBillboard) end })
+ToHTab:CreateButton({ Name = "Apply Billboard GUI to HRP", Callback = function() applyBillboard(selectedBillboard) end })
 
 ToHTab:CreateSection("Level Progression")
 ToHTab:CreateSlider({ Name = "Target Level", Range = { 1, 100 }, Increment = 1, CurrentValue = 1,
-	Callback = applyLevel })
+	Callback = function(v) targetLevelValue = v end })
+ToHTab:CreateButton({ Name = "Set Level Leaderstat", Callback = setLevelLeaderstat })
+ToHTab:CreateButton({ Name = "Set Level UI", Callback = setLevelUI })
 
 -- 3. SETTINGS TAB
 local SettingsTab = Window:CreateTab("Settings", 4483362458)
