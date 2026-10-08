@@ -970,4 +970,264 @@ local function applyBillboard(name)
 			bb.Size = UDim2.fromOffset(120, 40)
 			bb.AlwaysOnTop = true
 			local lbl = Instance.new("TextLabel")
-			lbl.Size = UDim2.
+			lbl.Size = UDim2.fromScale(1, 1)
+			lbl.BackgroundTransparency = 1
+			lbl.Font = FONT
+			lbl.TextSize = 14
+			lbl.TextColor3 = Color3.fromRGB(0, 102, 255)
+			lbl.Text = name
+			lbl.Parent = bb
+		end
+		bb.Name = "ToH_BB"
+		bb.Adornee = hrp
+		bb.StudsOffset = Vector3.new(0, 3, 0)
+		bb.Parent = hrp
+		notify("ToH", "Applied Title Billboard to HumanoidRootPart: " .. name)
+	else
+		notify("ToH", "Character HumanoidRootPart not found.")
+	end
+end
+
+local function setLevelLeaderstat()
+	local targetVal = targetLevelValue
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if leaderstats then
+		for _, stat in ipairs(leaderstats:GetChildren()) do
+			local lname = stat.Name:lower()
+			if lname:find("level") or lname:find("stage") or lname:find("lvl") then
+				if stat:IsA("IntValue") or stat:IsA("NumberValue") then stat.Value = targetVal end
+			end
+		end
+		notify("ToH", "Leaderstat level set to " .. targetVal)
+	else
+		notify("ToH", "Leaderstats not found.")
+	end
+end
+
+local function setLevelUI()
+	local targetVal = targetLevelValue
+	pcall(function()
+		local pg = player:FindFirstChild("PlayerGui")
+		local uiTarget = pg and pg:FindFirstChild("levels") or StarterGui:FindFirstChild("levels")
+		if uiTarget then
+			local frame = uiTarget:FindFirstChild("frame")
+			local lvlFolder = frame and frame:FindFirstChild("level")
+			local lvlElem = lvlFolder and lvlFolder:FindFirstChild("level")
+			if lvlElem then
+				if lvlElem:IsA("TextLabel") or lvlElem:IsA("TextBox") then lvlElem.Text = tostring(targetVal)
+				elseif lvlElem:IsA("IntValue") or lvlElem:IsA("NumberValue") then lvlElem.Value = targetVal end
+				notify("ToH", "UI level set to " .. targetVal)
+				return
+			end
+		end
+		notify("ToH", "UI level element not found.")
+	end)
+end
+
+-- Piggy Feature Functions
+local function bringPiggyItem(itemName)
+	if not itemName then return notify("Piggy", "Select an item/key first!") end
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return notify("Piggy", "Character not found!") end
+	
+	local found = false
+	for _, v in ipairs(Workspace:GetDescendants()) do
+		if (v:IsA("Tool") or v:IsA("Model") or v:IsA("BasePart")) and v.Name:lower() == itemName:lower() then
+			local targetPart = v:IsA("Model") and v.PrimaryPart or v
+			if targetPart and targetPart:IsA("BasePart") then
+				targetPart.CFrame = hrp.CFrame + Vector3.new(2, 0, 0)
+				found = true
+			end
+		end
+	end
+	if found then
+		notify("Piggy", "Brought item: " .. itemName)
+	else
+		notify("Piggy", "Item not found in workspace.")
+	end
+end
+
+local function teleportAllPiggyItems()
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return notify("Piggy", "Character not found!") end
+	
+	local count = 0
+	for _, v in ipairs(Workspace:GetDescendants()) do
+		if v:IsA("Tool") or v:IsA("Model") then
+			local ln = v.Name:lower()
+			if ln:find("key") or ln:find("hammer") or ln:find("wrench") or ln:find("carrot") or ln:find("gun") or ln:find("c4") or ln:find("battery") or ln:find("fuel") then
+				local targetPart = v:IsA("Model") and v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart")
+				if targetPart then
+					targetPart.CFrame = hrp.CFrame + Vector3.new(math.random(-3, 3), 0, math.random(-3, 3))
+					count += 1
+				end
+			end
+		end
+	end
+	notify("Piggy", "Brought " .. count .. " items/keys to you!")
+end
+
+local function skipPiggyMap()
+	pcall(function()
+		for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
+			if v:IsA("IntValue") or v:IsA("NumberValue") then
+				if v.Name:lower():find("timer") or v.Name:lower():find("time") then
+					v.Value = 0
+				end
+			end
+		end
+	end)
+	notify("Piggy", "Attempted map/timer skip.")
+end
+
+-- TTOH Automation Routine
+local teleporting = false
+local cancelTTOH = false
+
+local function stageKey(part)
+	local node = part.Parent
+	while node and node ~= workspace do
+		local num = node.Name:match("%d+")
+		if num then return tonumber(num) end
+		node = node.Parent
+	end
+	return part.Position.Y
+end
+
+local function collectParts(targetName)
+	local list = {}
+	for _, d in ipairs(workspace:GetDescendants()) do
+		if d:IsA("BasePart") and d.Name:lower() == targetName then
+			table.insert(list, d)
+		end
+	end
+	table.sort(list, function(a, b)
+		local ka, kb = stageKey(a), stageKey(b)
+		if ka == kb then return a.Position.Y < b.Position.Y end
+		return ka < kb
+	end)
+	return list
+end
+
+local function runTTOH()
+	if teleporting then return end
+	teleporting = true
+	cancelTTOH = false
+
+	local stops = collectParts("stop")
+	local starts = collectParts("start")
+	local total = math.max(#stops, #starts)
+
+	notify("TTOH", ("Found %d Stop and %d Start parts. Teleporting..."):format(#stops, #starts))
+
+	local count = 0
+	for i = 1, total do
+		for _, part in ipairs({ stops[i], starts[i] }) do
+			if cancelTTOH then break end
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if part and part.Parent and root then
+				root.CFrame = part.CFrame + Vector3.new(0, 4, 0)
+				count += 1
+				task.wait(0.25)
+			end
+		end
+		if cancelTTOH then break end
+	end
+
+	teleporting = false
+	notify("TTOH", (cancelTTOH and "Cancelled!" or "Done! Teleported to " .. count .. " parts."))
+end
+
+---------------------------------------------------------------------
+-- UI WINDOW & TABS SETUP
+---------------------------------------------------------------------
+local Window = NetUI:CreateWindow({ Name = "NETsourcesgg Hub" })
+
+-- 1. MAIN TAB
+local MainTab = Window:CreateTab("Main", 4483362458)
+MainTab:CreateSection("Movement & Stats")
+MainTab:CreateSlider({ Name = "Walk Speed", Range = { 0, 100 }, Increment = 1, CurrentValue = walkSpeed,
+	Callback = function(v) walkSpeed = v applyStats() end })
+MainTab:CreateSlider({ Name = "Jump Power", Range = { 0, 100 }, Increment = 1, CurrentValue = jumpPower,
+	Callback = function(v) jumpPower = v applyStats() end })
+MainTab:CreateToggle({ Name = "Fly (WASD, Space, Ctrl)", CurrentValue = false,
+	Callback = function(v) if v then startFly() else stopFly() end end })
+MainTab:CreateSlider({ Name = "Fly Speed", Range = { 0, 100 }, Increment = 1, CurrentValue = flySpeed,
+	Callback = function(v) flySpeed = v end })
+MainTab:CreateToggle({ Name = "Noclip", CurrentValue = false, Callback = function(v) noclip = v end })
+MainTab:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Callback = function(v) infJump = v end })
+
+MainTab:CreateSection("World & OP")
+MainTab:CreateToggle({ Name = "God Mode", CurrentValue = false,
+	Callback = function(v) godMode = v applyGod() end })
+MainTab:CreateToggle({ Name = "Fullbright", CurrentValue = false, Callback = toggleFullbright })
+
+-- 2. ToH TAB
+local ToHTab = Window:CreateTab("ToH", 4483362458)
+ToHTab:CreateSection("Progression Automation")
+ToHTab:CreateButton({ Name = "Teleport Through All Stop/Start Parts", Callback = function() task.spawn(runTTOH) end })
+ToHTab:CreateButton({ Name = "Cancel TTOH", Callback = function() cancelTTOH = true end })
+
+ToHTab:CreateSection("Gear Spawner")
+ToHTab:CreateDropdown({ Name = "Gears", Options = gearsList, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedGear = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Give Gear", Callback = function() giveGear(selectedGear, false) end })
+
+ToHTab:CreateDropdown({ Name = "Event Gears (Summer2026)", Options = summerGearsList, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedSummerGear = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Give Event Gear", Callback = function() giveGear(selectedSummerGear, true) end })
+
+ToHTab:CreateSection("Customization & Effects")
+ToHTab:CreateDropdown({ Name = "Accessories (Halos)", Options = halosList, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedAccessory = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Equip Accessory (Halo)", Callback = function() applyAccessory(selectedAccessory) end })
+
+ToHTab:CreateDropdown({ Name = "Trails", Options = trailsList, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedTrail = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Equip Trail to Torso", Callback = function() applyTrail(selectedTrail) end })
+
+ToHTab:CreateDropdown({ Name = "Torso/Head Effects", Options = effectsList, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedTorsoEffect = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Apply Torso/Head Effect", Callback = function() applyTorsoEffect(selectedTorsoEffect) end })
+
+ToHTab:CreateDropdown({ Name = "Billboard GUIs", Options = getGameBillboards(), DynamicOptions = getGameBillboards, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedBillboard = firstOf(opt) end })
+ToHTab:CreateButton({ Name = "Apply Billboard GUI to HRP", Callback = function() applyBillboard(selectedBillboard) end })
+
+ToHTab:CreateSection("Level Progression")
+ToHTab:CreateSlider({ Name = "Target Level", Range = { 1, 100 }, Increment = 1, CurrentValue = 1,
+	Callback = function(v) targetLevelValue = v end })
+ToHTab:CreateButton({ Name = "Set Level Leaderstat", Callback = setLevelLeaderstat })
+ToHTab:CreateButton({ Name = "Set Level UI", Callback = setLevelUI })
+
+-- 3. PIGGY TAB
+local PiggyTab = Window:CreateTab("Piggy", 4483362458)
+PiggyTab:CreateSection("Item & Key Automation")
+PiggyTab:CreateDropdown({ Name = "Items / Keys", Options = getPiggyItems(), DynamicOptions = getPiggyItems, CurrentOption = {}, MultipleOptions = false,
+	Callback = function(opt) selectedPiggyItem = firstOf(opt) end })
+PiggyTab:CreateButton({ Name = "Bring Selected Item", Callback = function() bringPiggyItem(selectedPiggyItem) end })
+PiggyTab:CreateButton({ Name = "Bring All Items / Keys", Callback = teleportAllPiggyItems })
+
+PiggyTab:CreateSection("Match Control")
+PiggyTab:CreateButton({ Name = "Skip Map / Timer", Callback = skipPiggyMap })
+
+-- 4. SETTINGS TAB
+local SettingsTab = Window:CreateTab("Settings", 4483362458)
+SettingsTab:CreateSection("Theme Mode (Required)")
+SettingsTab:CreateButton({ Name = "Dark Mode", Callback = function() activeThemeMode = "dark" updateThemeColors() notify("Settings", "Dark Mode applied") end })
+SettingsTab:CreateButton({ Name = "Light Mode", Callback = function() activeThemeMode = "light" updateThemeColors() notify("Settings", "Light Mode applied") end })
+
+SettingsTab:CreateSection("UIStroke Style (Required)")
+SettingsTab:CreateButton({ Name = "Sky (Normal Stroke)", Callback = function() activeStrokeMode = "sky" updateThemeColors() notify("Settings", "Sky stroke applied") end })
+SettingsTab:CreateButton({ Name = "Sunrise (Orange-Red)", Callback = function() activeStrokeMode = "sunrise" updateThemeColors() notify("Settings", "Sunrise stroke applied") end })
+SettingsTab:CreateButton({ Name = "Moonlit (Blue-Purple)", Callback = function() activeStrokeMode = "moonlit" updateThemeColors() notify("Settings", "Moonlit stroke applied") end })
+SettingsTab:CreateButton({ Name = "Apple (Red Stroke)", Callback = function() activeStrokeMode = "apple" updateThemeColors() notify("Settings", "Apple stroke applied") end })
+
+-- 5. CREDITS TAB
+local CreditsTab = Window:CreateTab("Credits", 4483362458)
+CreditsTab:CreateSection("Development Team")
+CreditsTab:CreateLabel("@lustisfirst on discord - UI Creation")
+CreditsTab:CreateLabel("@lustisfirst on discord - Coding + Scripting")
+
+updateThemeColors()
+notify("NETsourcesgg Hub", "Loaded successfully! Press [N] to toggle.")
