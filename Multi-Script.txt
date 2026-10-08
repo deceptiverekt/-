@@ -834,7 +834,6 @@ local function getGameBillboards()
 	return names
 end
 
--- Dynamic Piggy Item/Key/Badge Scanners
 local function getPiggyItems()
 	local items = {}
 	local seen = {}
@@ -1024,7 +1023,6 @@ local function setLevelUI()
 	end)
 end
 
--- Piggy Feature Functions
 local function bringPiggyItem(itemName)
 	if not itemName then return notify("Piggy", "Select an item/key first!") end
 	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
@@ -1080,7 +1078,6 @@ local function skipPiggyMap()
 	notify("Piggy", "Attempted map/timer skip.")
 end
 
--- TTOH Automation Routine
 local teleporting = false
 local cancelTTOH = false
 
