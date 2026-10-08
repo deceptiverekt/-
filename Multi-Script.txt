@@ -10,19 +10,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
 local player = Players.LocalPlayer
-local mouse = player:GetMouse()
-local camera = workspace.CurrentCamera
 
 ---------------------------------------------------------------------
--- NETsourcesgg UI & Framework
+-- NETsourcesgg UI Framework & Theme Engine
 ---------------------------------------------------------------------
 local NetUI = {}
-local netGui 
 local notifHolder
 
 local activeThemeMode = "dark"
 local activeStrokeMode = "sky"
-
 local isNexus1 = (player.Name:lower() == "nexus1" or player.DisplayName:lower() == "nexus1")
 
 local C = {
@@ -100,16 +96,13 @@ local function updateThemeColors()
 	end
 end
 
--- Exclusive Full Normal RGB Cycle Animation Loop for nexus1
 if isNexus1 then
 	RunService.RenderStepped:Connect(function()
 		local hue = (tick() % 5) / 5
 		local rgbColor = Color3.fromHSV(hue, 1, 1)
-		
 		C.border = rgbColor
 		C.text = rgbColor
 		C.accent = rgbColor
-		
 		for _, s in ipairs(registeredStrokes) do
 			if s and s.Parent then
 				local grad = s:FindFirstChildOfClass("UIGradient")
@@ -153,23 +146,18 @@ local function label(parent, text, props)
 end
 
 local function isPress(input)
-	return input.UserInputType == Enum.UserInputType.MouseButton1
-		or input.UserInputType == Enum.UserInputType.Touch
+	return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
 end
 
 local function isMove(input)
-	return input.UserInputType == Enum.UserInputType.MouseMovement
-		or input.UserInputType == Enum.UserInputType.Touch
+	return input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch
 end
 
 local function fire(cb, ...)
 	if type(cb) ~= "function" then return end
 	local args = table.pack(...)
 	task.spawn(function()
-		local ok, err = pcall(cb, table.unpack(args, 1, args.n))
-		if not ok then
-			warn("[Hub] callback error: " .. tostring(err))
-		end
+		pcall(cb, table.unpack(args, 1, args.n))
 	end)
 end
 
@@ -198,27 +186,17 @@ function NetUI:Notify(o)
 	table.insert(registeredFrames, f)
 	stroke(f, C.border)
 	
-	new("Frame", { 
-		Size = UDim2.new(0, 4, 1, 0), 
-		Position = UDim2.new(1, -4, 0, 0), 
-		BackgroundColor3 = C.accent, 
-		BorderSizePixel = 0 
-	}, f)
+	new("Frame", { Size = UDim2.new(0, 4, 1, 0), Position = UDim2.new(1, -4, 0, 0), BackgroundColor3 = C.accent, BorderSizePixel = 0 }, f)
 
 	local inner = new("Frame", {
 		Size = UDim2.new(1, -8, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(6, 0),
 	}, f)
 	new("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = BY_ORDER }, inner)
-	new("UIPadding", {
-		PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 8),
-		PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8),
-	}, inner)
+	new("UIPadding", { PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8) }, inner)
 	
 	if o.Title and o.Title ~= "" then
-		label(inner, tostring(o.Title), {
-			Size = UDim2.new(1, 0, 0, 16), TextColor3 = C.text, LayoutOrder = 1,
-		})
+		label(inner, tostring(o.Title), { Size = UDim2.new(1, 0, 0, 16), TextColor3 = C.text, LayoutOrder = 1 })
 	end
 	label(inner, tostring(o.Content or ""), {
 		Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, TextWrapped = true,
@@ -243,13 +221,8 @@ function NetUI:CreateWindow(opts)
 	if typeof(gethui) == "function" then
 		parented = pcall(function() gui.Parent = gethui() end) and gui.Parent ~= nil
 	end
-	if not parented then
-		parented = pcall(function() gui.Parent = CoreGui end) and gui.Parent ~= nil
-	end
-	if not parented then
-		gui.Parent = player:WaitForChild("PlayerGui")
-	end
-	netGui = gui
+	if not parented then parented = pcall(function() gui.Parent = CoreGui end) and gui.Parent ~= nil end
+	if not parented then gui.Parent = player:WaitForChild("PlayerGui") end
 
 	local main = new("Frame", {
 		Name = "Main", Size = UDim2.fromOffset(W, H),
@@ -259,58 +232,35 @@ function NetUI:CreateWindow(opts)
 	table.insert(registeredFrames, main)
 	stroke(main, C.border)
 
-	local titleBar = new("Frame", {
-		Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1, BorderSizePixel = 0,
-	}, main)
-	label(titleBar, opts.Name or "NETsourcesgg Hub", {
-		Size = UDim2.new(1, -40, 1, 0), Position = UDim2.fromOffset(10, 0), TextColor3 = C.text,
-	})
+	local titleBar = new("Frame", { Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1, BorderSizePixel = 0 }, main)
+	label(titleBar, opts.Name or "NETsourcesgg Hub", { Size = UDim2.new(1, -40, 1, 0), Position = UDim2.fromOffset(10, 0), TextColor3 = C.text })
 	local closeBtn = new("TextButton", {
 		Text = "x", Font = FONT, TextSize = 16, TextColor3 = C.text, AutoButtonColor = false,
-		BackgroundTransparency = 1, Size = UDim2.fromOffset(28, 28),
-		Position = UDim2.new(1, -28, 0, 0),
+		BackgroundTransparency = 1, Size = UDim2.fromOffset(28, 28), Position = UDim2.new(1, -28, 0, 0),
 	}, titleBar)
-	closeBtn.MouseEnter:Connect(function() closeBtn.TextColor3 = C.dim end)
-	closeBtn.MouseLeave:Connect(function() closeBtn.TextColor3 = C.text end)
 	
-	new("Frame", {
-		Size = UDim2.new(1, 0, 0, 1), Position = UDim2.fromOffset(0, 28),
-		BackgroundColor3 = C.border, BorderSizePixel = 0,
-	}, main)
+	new("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.fromOffset(0, 28), BackgroundColor3 = C.border, BorderSizePixel = 0 }, main)
 
-	local tabBar = new("Frame", {
-		Size = UDim2.new(1, -16, 0, 24), Position = UDim2.fromOffset(8, 35),
-		BackgroundTransparency = 1,
-	}, main)
-	new("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4),
-		SortOrder = BY_ORDER,
-	}, tabBar)
+	local tabBar = new("Frame", { Size = UDim2.new(1, -16, 0, 24), Position = UDim2.fromOffset(8, 35), BackgroundTransparency = 1 }, main)
+	new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4), SortOrder = BY_ORDER }, tabBar)
 
 	local pages = new("Frame", {
-		Name = "PagesContainer",
-		Size = UDim2.new(1, -16, 1, -72), Position = UDim2.fromOffset(8, 64),
+		Name = "PagesContainer", Size = UDim2.new(1, -16, 1, -72), Position = UDim2.fromOffset(8, 64),
 		BackgroundTransparency = 1, ClipsDescendants = true,
 	}, main)
 	stroke(pages, C.border)
 
 	local dragging, dragStart, startPos = false, nil, nil
 	titleBar.InputBegan:Connect(function(input)
-		if isPress(input) then
-			dragging, dragStart, startPos = true, input.Position, main.Position
-		end
+		if isPress(input) then dragging, dragStart, startPos = true, input.Position, main.Position end
 	end)
 	UserInputService.InputChanged:Connect(function(input)
 		if dragging and isMove(input) then
 			local d = input.Position - dragStart
-			main.Position = UDim2.new(
-				startPos.X.Scale, startPos.X.Offset + d.X,
-				startPos.Y.Scale, startPos.Y.Offset + d.Y)
+			main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
 		end
 	end)
-	UserInputService.InputEnded:Connect(function(input)
-		if isPress(input) then dragging = false end
-	end)
+	UserInputService.InputEnded:Connect(function(input) if isPress(input) then dragging = false end end)
 
 	closeBtn.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
 	UserInputService.InputBegan:Connect(function(input)
@@ -327,32 +277,26 @@ function NetUI:CreateWindow(opts)
 
 	local Window = { _tabs = {} }
 
-	function Window:CreateTab(name, _icon)
+	function Window:CreateTab(name)
 		local tab = {}
-
 		local textW = TextService:GetTextSize(name, TSIZE, FONT, Vector2.new(1000, 100)).X
 		local btn = new("TextButton", {
 			Text = name, Font = FONT, TextSize = TSIZE, TextColor3 = C.dim, AutoButtonColor = false,
-			BackgroundTransparency = 1, BorderSizePixel = 0,
-			Size = UDim2.fromOffset(textW + 10, 22), LayoutOrder = #Window._tabs + 1,
+			BackgroundTransparency = 1, BorderSizePixel = 0, Size = UDim2.fromOffset(textW + 10, 22), LayoutOrder = #Window._tabs + 1,
 		}, tabBar)
 		stroke(btn, C.border)
 
 		local page = new("ScrollingFrame", {
 			Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0,
-			ScrollBarThickness = 2, ScrollBarImageColor3 = C.accent,
-			CanvasSize = UDim2.new(), Visible = false,
+			ScrollBarThickness = 2, ScrollBarImageColor3 = C.accent, CanvasSize = UDim2.new(), Visible = false,
 		}, pages)
-		local contentCol = new("Frame", {
-			Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1,
-		}, page)
+		local contentCol = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1 }, page)
 		new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = BY_ORDER }, contentCol)
 		new("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), PaddingTop = UDim.new(0, 6) }, contentCol)
 
-		local function fitCanvas()
+		contentCol:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 			page.CanvasSize = UDim2.fromOffset(0, contentCol.AbsoluteSize.Y + 12)
-		end
-		contentCol:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitCanvas)
+		end)
 
 		tab._set = function(on)
 			page.Visible = on
@@ -366,222 +310,115 @@ function NetUI:CreateWindow(opts)
 		if #Window._tabs == 1 then tab._set(true) end
 
 		local current
-
 		local function newGroup(title)
 			local box = new("Frame", {
-				Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y,
-				BackgroundColor3 = C.panel, BorderSizePixel = 0,
-				LayoutOrder = #contentCol:GetChildren(),
+				Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundColor3 = C.panel, BorderSizePixel = 0, LayoutOrder = #contentCol:GetChildren(),
 			}, contentCol)
 			table.insert(registeredFrames, box)
 			stroke(box, C.border)
 			new("UIListLayout", { SortOrder = BY_ORDER }, box)
-			local head = label(box, title, {
-				Size = UDim2.new(1, 0, 0, 20), LayoutOrder = 1, TextTruncate = Enum.TextTruncate.AtEnd,
-				TextColor3 = C.text,
-			})
+			local head = label(box, title, { Size = UDim2.new(1, 0, 0, 20), LayoutOrder = 1, TextColor3 = C.text })
 			new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, head)
-			local content = new("Frame", {
-				Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y,
-				BackgroundTransparency = 1, LayoutOrder = 2,
-			}, box)
+			local content = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1, LayoutOrder = 2 }, box)
 			new("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = BY_ORDER }, content)
-			new("UIPadding", {
-				PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8),
-			}, content)
+			new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8) }, content)
 			current = content
 		end
 
-		local function add(height)
+		local function add()
 			if not current then newGroup(name) end
 			return current
 		end
 
-		function tab:CreateSection(title)
-			newGroup(tostring(title))
-		end
-
+		function tab:CreateSection(title) newGroup(tostring(title)) end
 		function tab:CreateLabel(text)
-			text = tostring(text)
-			local parent = add(14)
-			local l = label(parent, text, {
-				Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, TextWrapped = true,
-				TextColor3 = C.dim, TextYAlignment = Enum.TextYAlignment.Top,
-			})
+			local l = label(add(), tostring(text), { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, TextWrapped = true, TextColor3 = C.dim, TextYAlignment = Enum.TextYAlignment.Top })
 			return { Set = function(_, t) l.Text = tostring(t) end }
 		end
 
 		function tab:CreateToggle(o)
-			local parent = add(22)
 			local value = o.CurrentValue and true or false
-			local row = new("TextButton", {
-				Text = "", AutoButtonColor = false, BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, 16),
-			}, parent)
-			local box = new("Frame", {
-				Size = UDim2.fromOffset(12, 12), Position = UDim2.fromOffset(0, 2),
-				BackgroundColor3 = C.item, BorderSizePixel = 0,
-			}, row)
+			local row = new("TextButton", { Text = "", AutoButtonColor = false, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 16) }, add())
+			local box = new("Frame", { Size = UDim2.fromOffset(12, 12), Position = UDim2.fromOffset(0, 2), BackgroundColor3 = C.item, BorderSizePixel = 0 }, row)
 			table.insert(registeredFrames, box)
 			stroke(box, C.border)
 			label(row, o.Name, { Position = UDim2.fromOffset(20, 0), Size = UDim2.new(1, -20, 1, 0) })
-			local function render() 
-				box.BackgroundColor3 = value and C.accent or C.item 
-			end
+			local function render() box.BackgroundColor3 = value and C.accent or C.item end
 			render()
 			row.MouseButton1Click:Connect(function()
 				value = not value
 				render()
 				fire(o.Callback, value)
 			end)
-			return {
-				Set = function(_, v)
-					value = v and true or false
-					render()
-					fire(o.Callback, value)
-				end,
-			}
+			return { Set = function(_, v) value = v and true or false render() fire(o.Callback, value) end }
 		end
 
 		function tab:CreateSlider(o)
-			local parent = add(38)
-			local lo, hi = o.Range[1], o.Range[2]
-			local inc = o.Increment or 1
-			local suffix = o.Suffix or ""
+			local lo, hi, inc = o.Range[1], o.Range[2], o.Increment or 1
 			local value = math.clamp(o.CurrentValue or lo, lo, hi)
-			local decimals, t = 0, inc
-			while t % 1 ~= 0 and decimals < 3 do
-				t = t * 10
-				decimals = decimals + 1
-			end
-			local pattern = "%." .. decimals .. "f"
-
-			local holder = new("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1 }, parent)
+			local holder = new("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1 }, add())
 			label(holder, o.Name, { Size = UDim2.new(1, 0, 0, 14) })
-			local bar = new("TextButton", {
-				Text = "", AutoButtonColor = false, Position = UDim2.fromOffset(0, 16),
-				Size = UDim2.new(1, 0, 0, 14), BackgroundColor3 = C.item, BorderSizePixel = 0,
-			}, holder)
+			local bar = new("TextButton", { Text = "", AutoButtonColor = false, Position = UDim2.fromOffset(0, 16), Size = UDim2.new(1, 0, 0, 14), BackgroundColor3 = C.item, BorderSizePixel = 0 }, holder)
 			table.insert(registeredFrames, bar)
 			stroke(bar, C.border)
-			local fill = new("Frame", {
-				Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.accent, BorderSizePixel = 0,
-			}, bar)
-			local txt = label(bar, "", { 
-				Size = UDim2.fromScale(1, 1), 
-				TextXAlignment = CENTER, 
-				ZIndex = 2, 
-				TextColor3 = Color3.new(1, 1, 1) 
-			})
+			local fill = new("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.accent, BorderSizePixel = 0 }, bar)
+			local txt = label(bar, "", { Size = UDim2.fromScale(1, 1), TextXAlignment = CENTER, ZIndex = 2, TextColor3 = Color3.new(1, 1, 1) })
 
 			local function render()
 				fill.Size = UDim2.fromScale((value - lo) / (hi - lo), 1)
-				txt.Text = string.format(pattern, value) .. suffix
+				txt.Text = tostring(value) .. (o.Suffix or "")
 			end
 			render()
 
 			local function setFromX(x)
 				local rel = math.clamp((x - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1)
-				local v = lo + rel * (hi - lo)
-				v = lo + math.floor((v - lo) / inc + 0.5) * inc
-				v = tonumber(string.format(pattern, math.clamp(v, lo, hi)))
-				if v ~= value then
-					value = v
-					render()
-					fire(o.Callback, value)
-				end
+				local v = lo + math.floor(((lo + rel * (hi - lo)) - lo) / inc + 0.5) * inc
+				value = math.clamp(v, lo, hi)
+				render()
+				fire(o.Callback, value)
 			end
 			local sliding = false
-			bar.InputBegan:Connect(function(input)
-				if isPress(input) then
-					sliding = true
-					setFromX(input.Position.X)
-				end
-			end)
-			UserInputService.InputChanged:Connect(function(input)
-				if sliding and isMove(input) then setFromX(input.Position.X) end
-			end)
-			UserInputService.InputEnded:Connect(function(input)
-				if isPress(input) then sliding = false end
-			end)
-			return {
-				Set = function(_, v)
-					value = math.clamp(tonumber(v) or lo, lo, hi)
-					render()
-					fire(o.Callback, value)
-				end,
-			}
+			bar.InputBegan:Connect(function(input) if isPress(input) then sliding = true setFromX(input.Position.X) end end)
+			UserInputService.InputChanged:Connect(function(input) if sliding and isMove(input) then setFromX(input.Position.X) end end)
+			UserInputService.InputEnded:Connect(function(input) if isPress(input) then sliding = false end end)
+			return { Set = function(_, v) value = math.clamp(v, lo, hi) render() fire(o.Callback, value) end }
 		end
 
 		function tab:CreateButton(o)
-			local parent = add(24)
 			local b = new("TextButton", {
 				Text = o.Name, Font = FONT, TextSize = TSIZE, TextColor3 = C.text, AutoButtonColor = false,
 				BackgroundColor3 = C.item, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 20),
-			}, parent)
+			}, add())
 			table.insert(registeredFrames, b)
 			local s = stroke(b, C.border)
 			b.MouseEnter:Connect(function() b.BackgroundColor3 = C.hover end)
 			b.MouseLeave:Connect(function() b.BackgroundColor3 = C.item s.Color = C.border end)
-			b.MouseButton1Down:Connect(function() s.Color = C.text end)
-			b.MouseButton1Up:Connect(function() s.Color = C.border end)
 			b.MouseButton1Click:Connect(function() fire(o.Callback) end)
-			return { Set = function(_, t2) b.Text = tostring(t2) end }
 		end
 
 		function tab:CreateDropdown(o)
-			local parent = add(42)
-			local options = o.Options or {}
-			local selected = type(o.CurrentOption) == "table" and o.CurrentOption[1] or nil
-			local dd = {}
-
-			local holder = new("Frame", {
-				Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1,
-			}, parent)
+			local options, selected = o.Options or {}, nil
+			local holder = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1 }, add())
 			new("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = BY_ORDER }, holder)
 			label(holder, o.Name, { Size = UDim2.new(1, 0, 0, 14), LayoutOrder = 1 })
-			local head = new("TextButton", {
-				Text = "", AutoButtonColor = false, BackgroundColor3 = C.item, BorderSizePixel = 0,
-				Size = UDim2.new(1, 0, 0, 18), LayoutOrder = 2,
-			}, holder)
+			local head = new("TextButton", { Text = "", AutoButtonColor = false, BackgroundColor3 = C.item, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 18), LayoutOrder = 2 }, holder)
 			table.insert(registeredFrames, head)
 			stroke(head, C.border)
-			local shown = label(head, selected and tostring(selected) or "--", {
-				Size = UDim2.new(1, -22, 1, 0), Position = UDim2.fromOffset(6, 0),
-				TextTruncate = Enum.TextTruncate.AtEnd,
-			})
-			local arrow = label(head, "v", {
-				Size = UDim2.fromOffset(16, 18), Position = UDim2.new(1, -18, 0, 0),
-				TextXAlignment = CENTER, TextColor3 = C.dim,
-			})
-			local list = new("ScrollingFrame", {
-				LayoutOrder = 3, Size = UDim2.new(1, 0, 0, 18), BackgroundColor3 = C.item, BorderSizePixel = 0,
-				ScrollBarThickness = 2, ScrollBarImageColor3 = C.accent, CanvasSize = UDim2.new(),
-				AutomaticCanvasSize = AUTO_Y, Visible = false,
-			}, holder)
+			local shown = label(head, "--", { Size = UDim2.new(1, -22, 1, 0), Position = UDim2.fromOffset(6, 0), TextTruncate = Enum.TextTruncate.AtEnd })
+			local arrow = label(head, "v", { Size = UDim2.fromOffset(16, 18), Position = UDim2.new(1, -18, 0, 0), TextXAlignment = CENTER, TextColor3 = C.dim })
+			local list = new("ScrollingFrame", { LayoutOrder = 3, Size = UDim2.new(1, 0, 0, 18), BackgroundColor3 = C.item, BorderSizePixel = 0, ScrollBarThickness = 2, AutomaticCanvasSize = AUTO_Y, Visible = false }, holder)
 			table.insert(registeredFrames, list)
 			stroke(list, C.border)
 			new("UIListLayout", { SortOrder = BY_ORDER }, list)
 
-			local function setOpen(v)
-				list.Visible = v
-				arrow.Text = v and "^" or "v"
-			end
-
 			local function rebuild()
-				if type(o.DynamicOptions) == "function" then
-					options = o.DynamicOptions()
-				end
-				for _, ch in ipairs(list:GetChildren()) do
-					if ch:IsA("TextButton") then ch:Destroy() end
-				end
+				if type(o.DynamicOptions) == "function" then options = o.DynamicOptions() end
+				for _, ch in ipairs(list:GetChildren()) do if ch:IsA("TextButton") then ch:Destroy() end end
 				for i, opt in ipairs(options) do
 					local ob = new("TextButton", {
 						Text = tostring(opt), Font = FONT, TextSize = TSIZE, AutoButtonColor = false,
 						TextColor3 = (opt == selected) and C.accent or C.text, TextXAlignment = LEFT,
-						TextTruncate = Enum.TextTruncate.AtEnd, BackgroundColor3 = C.hover,
-						BackgroundTransparency = 1, BorderSizePixel = 0,
-						Size = UDim2.new(1, 0, 0, 18), LayoutOrder = i,
+						BackgroundColor3 = C.hover, BackgroundTransparency = 1, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 18), LayoutOrder = i,
 					}, list)
 					new("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6) }, ob)
 					ob.MouseEnter:Connect(function() ob.BackgroundTransparency = 0 end)
@@ -589,9 +426,9 @@ function NetUI:CreateWindow(opts)
 					ob.MouseButton1Click:Connect(function()
 						selected = opt
 						shown.Text = tostring(opt)
-						setOpen(false)
+						list.Visible = false
+						arrow.Text = "v"
 						fire(o.Callback, opt)
-						rebuild()
 					end)
 				end
 				list.Size = UDim2.new(1, 0, 0, math.max(1, math.min(#options, 6)) * 18)
@@ -599,48 +436,25 @@ function NetUI:CreateWindow(opts)
 			rebuild()
 
 			head.MouseButton1Click:Connect(function()
-				if type(o.DynamicOptions) == "function" then
-					options = o.DynamicOptions()
-				end
+				if type(o.DynamicOptions) == "function" then options = o.DynamicOptions() end
 				if #options == 0 then return end
-				setOpen(not list.Visible)
+				list.Visible = not list.Visible
+				arrow.Text = list.Visible and "^" or "v"
+				if list.Visible then rebuild() end
 			end)
-
-			function dd:Refresh(newOptions)
-				options = newOptions or {}
-				selected = nil
-				shown.Text = "--"
-				setOpen(false)
-				rebuild()
-			end
-			function dd:Set(v)
-				if type(v) == "table" then v = v[1] end
-				selected = v
-				shown.Text = v ~= nil and tostring(v) or "--"
-				rebuild()
-				fire(o.Callback, v)
-			end
-			return dd
 		end
 
 		return tab
 	end
-
 	return Window
 end
 
-local function notify(title, content)
-	NetUI:Notify({ Title = title, Content = content, Duration = 5 })
-end
-
-local function firstOf(v)
-	return type(v) == "table" and v[1] or v
-end
+local function notify(title, content) NetUI:Notify({ Title = title, Content = content, Duration = 5 }) end
+local function firstOf(v) return type(v) == "table" and v[1] or v end
 
 ---------------------------------------------------------------------
--- ROBUST FEATURE LOGIC (MAIN & ToH & PIGGY)
+-- Feature Logic & Execution (ToH)
 ---------------------------------------------------------------------
-local function getChar() return player.Character or player.CharacterAdded:Wait() end
 local function getHum()
 	local c = player.Character
 	return c and c:FindFirstChildOfClass("Humanoid")
@@ -649,18 +463,6 @@ end
 local walkSpeed, jumpPower, flySpeed = 16, 50, 50
 local noclip, infJump, godMode = false, false, false
 
-local godConn
-local function applyGod()
-	if godConn then godConn:Disconnect() godConn = nil end
-	local hum = getHum()
-	if not hum or not godMode then return end
-	hum.MaxHealth = math.huge
-	hum.Health = math.huge
-	godConn = hum.HealthChanged:Connect(function()
-		if hum.Health < hum.MaxHealth then hum.Health = hum.MaxHealth end
-	end)
-end
-
 local function applyStats()
 	local hum = getHum()
 	if hum then
@@ -668,13 +470,8 @@ local function applyStats()
 		hum.WalkSpeed = walkSpeed
 		hum.JumpPower = jumpPower
 	end
-	applyGod()
 end
-
-player.CharacterAdded:Connect(function()
-	task.wait(0.5)
-	applyStats()
-end)
+player.CharacterAdded:Connect(function() task.wait(0.5) applyStats() end)
 
 local flyConn, bv, bg
 local function stopFly()
@@ -686,22 +483,18 @@ local function stopFly()
 end
 
 local function startFly()
-	local root = getChar():FindFirstChild("HumanoidRootPart")
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	local hum = getHum()
 	if not root or not hum then return end
-
 	hum.PlatformStand = true
-	bv = Instance.new("BodyVelocity")
+	bv = Instance.new("BodyVelocity", root)
 	bv.MaxForce = Vector3.one * 1e9
 	bv.Velocity = Vector3.zero
-	bv.Parent = root
-
-	bg = Instance.new("BodyGyro")
+	bg = Instance.new("BodyGyro", root)
 	bg.MaxTorque = Vector3.one * 1e9
 	bg.P = 9e4
 	bg.CFrame = root.CFrame
-	bg.Parent = root
-
+	
 	flyConn = RunService.RenderStepped:Connect(function()
 		local cam = workspace.CurrentCamera
 		local dir = Vector3.zero
@@ -711,9 +504,7 @@ local function startFly()
 		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
 		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.yAxis end
 		if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.yAxis end
-		if dir.Magnitude == 0 and hum.MoveDirection.Magnitude > 0 then
-			dir = hum.MoveDirection
-		end
+		if dir.Magnitude == 0 and hum.MoveDirection.Magnitude > 0 then dir = hum.MoveDirection end
 		bv.Velocity = dir.Magnitude > 0 and dir.Unit * flySpeed or Vector3.zero
 		bg.CFrame = cam.CFrame
 	end)
@@ -721,10 +512,8 @@ end
 
 RunService.Stepped:Connect(function()
 	if noclip and player.Character then
-		for _, part in ipairs(player.Character:GetDescendants()) do
-			if part:IsA("BasePart") and part.CanCollide then
-				part.CanCollide = false
-			end
+		for _, p in ipairs(player.Character:GetDescendants()) do
+			if p:IsA("BasePart") then p.CanCollide = false end
 		end
 	end
 end)
@@ -736,48 +525,25 @@ UserInputService.JumpRequest:Connect(function()
 	end
 end)
 
-local fullbrightEnabled = false
-local originalAmbient = Lighting.Ambient
-local originalOutdoorAmbient = Lighting.OutdoorAmbient
-local originalBrightness = Lighting.Brightness
-local originalClockTime = Lighting.ClockTime
-local originalGlobalShadows = Lighting.GlobalShadows
-
+local fullbrightOn = false
 RunService.RenderStepped:Connect(function()
-	if fullbrightEnabled then
-		Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-		Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+	if fullbrightOn then
+		Lighting.Ambient = Color3.new(1, 1, 1)
+		Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
 		Lighting.Brightness = 2
 		Lighting.ClockTime = 14
 		Lighting.GlobalShadows = false
 	end
 end)
 
-local function toggleFullbright(state)
-	fullbrightEnabled = state
-	if not state then
-		Lighting.Ambient = originalAmbient
-		Lighting.OutdoorAmbient = originalOutdoorAmbient
-		Lighting.Brightness = originalBrightness
-		Lighting.ClockTime = originalClockTime
-		Lighting.GlobalShadows = originalGlobalShadows
-	end
-end
-
----------------------------------------------------------------------
--- ToH & PIGGY HELPERS / ASSETS
----------------------------------------------------------------------
+-- Asset Retrieval Helpers
 local function getFolderItems(pathTable, filterFunc)
 	local items = {}
-	local current = ReplicatedStorage
-	for _, part in ipairs(pathTable) do
-		current = current and current:FindFirstChild(part)
-	end
-	if current then
-		for _, child in ipairs(current:GetChildren()) do
-			if not filterFunc or filterFunc(child.Name) then
-				table.insert(items, child.Name)
-			end
+	local cur = ReplicatedStorage
+	for _, p in ipairs(pathTable) do cur = cur and cur:FindFirstChild(p) end
+	if cur then
+		for _, ch in ipairs(cur:GetChildren()) do
+			if not filterFunc or filterFunc(ch.Name) then table.insert(items, ch.Name) end
 		end
 	end
 	return items
@@ -785,12 +551,9 @@ end
 
 local function findItemDeep(root, name)
 	if not root then return nil end
-	local direct = root:FindFirstChild(name)
-	if direct then return direct end
-	for _, child in ipairs(root:GetDescendants()) do
-		if child.Name:lower() == name:lower() then
-			return child
-		end
+	if root:FindFirstChild(name) then return root:FindFirstChild(name) end
+	for _, d in ipairs(root:GetDescendants()) do
+		if d.Name:lower() == name:lower() then return d end
 	end
 	return nil
 end
@@ -798,75 +561,47 @@ end
 local gearsList = getFolderItems({"assets", "gears"})
 if #gearsList == 0 then gearsList = getFolderItems({"Assets", "Gear"}) end
 
-local summerGearsList = getFolderItems({"assets", "models", "summer2026", "rocktools"})
-local summerFolderItems = getFolderItems({"assets", "models", "summer2026"})
-for _, v in ipairs(summerFolderItems) do
-	if not table.find(summerGearsList, v) then table.insert(summerGearsList, v) end
+local summerGearsList = {}
+local function loadSummerGears()
+	local assets = ReplicatedStorage:FindFirstChild("assets") or ReplicatedStorage:FindFirstChild("Assets")
+	local summerRoot = assets and assets:FindFirstChild("models") and assets.models:FindFirstChild("summer2026")
+	if summerRoot then
+		for _, ch in ipairs(summerRoot:GetChildren()) do
+			if ch.Name:lower() ~= "rocktools" then
+				table.insert(summerGearsList, ch.Name)
+			end
+		end
+	end
 end
+loadSummerGears()
 
-local halosList = getFolderItems({"assets", "effects"}, function(name) return name:lower():find("halo") ~= nil end)
-if #halosList == 0 then halosList = getFolderItems({"Assets", "Effects"}, function(name) return name:lower():find("halo") ~= nil end) end
+local halosList = getFolderItems({"assets", "effects"}, function(n) return n:lower():find("halo") ~= nil end)
+if #halosList == 0 then halosList = getFolderItems({"Assets", "Effects"}, function(n) return n:lower():find("halo") ~= nil end) end
 
-local trailsList = getFolderItems({"assets", "effects"}, function(name) return name:lower():find("trail") ~= nil end)
-if #trailsList == 0 then trailsList = getFolderItems({"Assets", "Effects"}, function(name) return name:lower():find("trail") ~= nil end) end
+local trailsList = getFolderItems({"assets", "effects"}, function(n) return n:lower():find("trail") ~= nil end)
+if #trailsList == 0 then trailsList = getFolderItems({"Assets", "Effects"}, function(n) return n:lower():find("trail") ~= nil end) end
 
-local effectsList = getFolderItems({"assets", "effects"}, function(name) return name:lower():find("halo") == nil and name:lower():find("trail") == nil end)
+local effectsList = getFolderItems({"assets", "effects"}, function(n) return n:lower():find("halo") == nil and n:lower():find("trail") == nil end)
 if #effectsList == 0 then effectsList = getFolderItems({"Assets", "Effects"}) end
 
 local function getGameBillboards()
 	local names = {}
 	local seen = {}
-	local function scan(parent)
-		for _, v in ipairs(parent:GetDescendants()) do
-			if v:IsA("BillboardGui") then
-				if not seen[v.Name] then
-					seen[v.Name] = true
-					table.insert(names, v.Name)
-				end
+	local function scan(p)
+		for _, v in ipairs(p:GetDescendants()) do
+			if v:IsA("BillboardGui") and not seen[v.Name] then
+				seen[v.Name] = true
+				table.insert(names, v.Name)
 			end
 		end
 	end
-	scan(Workspace)
-	scan(ReplicatedStorage)
-	local pg = player:FindFirstChild("PlayerGui")
-	if pg then scan(pg) end
+	scan(Workspace) scan(ReplicatedStorage)
+	if player:FindFirstChild("PlayerGui") then scan(player.PlayerGui) end
 	if #names == 0 then table.insert(names, "DefaultBB") end
 	return names
 end
 
-local function getPiggyItems()
-	local items = {}
-	local seen = {}
-	for _, v in ipairs(Workspace:GetDescendants()) do
-		if v:IsA("Tool") or v:IsA("Model") or v:IsA("BasePart") then
-			local n = v.Name
-			local ln = n:lower()
-			if ln:find("key") or ln:find("hammer") or ln:find("wrench") or ln:find("carrot") or ln:find("gun") or ln:find("c4") or ln:find("battery") or ln:find("fuel") or ln:find("board") then
-				if not seen[n] then
-					seen[n] = true
-					table.insert(items, n)
-				end
-			end
-		end
-	end
-	if #items == 0 then
-		table.insert(items, "RedKey")
-		table.insert(items, "BlueKey")
-		table.insert(items, "GreenKey")
-		table.insert(items, "YellowKey")
-		table.insert(items, "Hammer")
-		table.insert(items, "Wrench")
-	end
-	return items
-end
-
-local selectedGear = nil
-local selectedSummerGear = nil
-local selectedAccessory = nil
-local selectedTrail = nil
-local selectedTorsoEffect = nil
-local selectedBillboard = nil
-local selectedPiggyItem = nil
+local selectedGear, selectedSummerGear, selectedAccessory, selectedTrail, selectedTorsoEffect, selectedBillboard = nil, nil, nil, nil, nil, nil
 local targetLevelValue = 1
 
 local function giveGear(name, isSummer)
@@ -875,353 +610,244 @@ local function giveGear(name, isSummer)
 	local item = nil
 	if isSummer then
 		local summerRoot = assets and assets:FindFirstChild("models") and assets.models:FindFirstChild("summer2026")
-		item = findItemDeep(summerRoot, name)
-		if not item then
-			local rocktools = summerRoot and summerRoot:FindFirstChild("rocktools")
-			item = findItemDeep(rocktools, name)
-		end
+		if summerRoot then item = summerRoot:FindFirstChild(name) end
 	else
-		local gearsRoot = assets and (assets:FindFirstChild("gears") or assets:FindFirstChild("Gear"))
-		item = findItemDeep(gearsRoot, name)
+		item = findItemDeep(assets and (assets:FindFirstChild("gears") or assets:FindFirstChild("Gear")), name)
 	end
 	if not item then item = findItemDeep(assets, name) end
 	if item then
 		item:Clone().Parent = player:FindFirstChild("Backpack") or player.Character
 		notify("ToH", "Given gear: " .. name)
 	else
-		notify("ToH", "Gear asset not found in storage.")
+		notify("ToH", "Gear asset not found.")
 	end
 end
 
+-- FIXED: Halos & Accessories replication logic
 local function applyAccessory(name)
-	if not name then return notify("ToH", "Select a halo/accessory first!") end
+	if not name then return notify("ToH", "Select an accessory/halo!") end
 	local assets = ReplicatedStorage:FindFirstChild("assets") or ReplicatedStorage:FindFirstChild("Assets")
-	local effectsFolder = assets and (assets:FindFirstChild("effects") or assets:FindFirstChild("Effects"))
-	local item = findItemDeep(effectsFolder, name) or findItemDeep(assets, name)
+	local item = findItemDeep(assets and (assets:FindFirstChild("effects") or assets:FindFirstChild("Effects")), name) or findItemDeep(assets, name)
 	local char = player.Character
 	if item and char then
-		item:Clone().Parent = char
-		notify("ToH", "Equipped Accessory (Halo): " .. name)
+		local clone = item:Clone()
+		if clone:IsA("BasePart") or clone:IsA("Model") then
+			local acc = Instance.new("Accessory")
+			acc.Name = "ToH_Halo"
+			clone.Parent = acc
+			acc.Parent = char
+		else
+			clone.Parent = char
+		end
+		notify("ToH", "Equipped Accessory to Player: " .. name)
 	else
-		notify("ToH", "Accessory asset not found.")
+		notify("ToH", "Accessory not found.")
 	end
 end
 
+-- FIXED: Trails assignment with proper attachments inside Torso
 local function applyTrail(name)
-	if not name then return notify("ToH", "Select a trail first!") end
+	if not name then return notify("ToH", "Select a trail!") end
 	local assets = ReplicatedStorage:FindFirstChild("assets") or ReplicatedStorage:FindFirstChild("Assets")
-	local effectsFolder = assets and (assets:FindFirstChild("effects") or assets:FindFirstChild("Effects"))
-	local item = findItemDeep(effectsFolder, name) or findItemDeep(assets, name)
+	local item = findItemDeep(assets and (assets:FindFirstChild("effects") or assets:FindFirstChild("Effects")), name) or findItemDeep(assets, name)
 	local char = player.Character
 	local torso = char and (char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart"))
-	if item and torso then
+	if torso then
 		local old = torso:FindFirstChild("ToH_Trail")
 		if old then old:Destroy() end
-		local clone = item:Clone()
-		clone.Name = "ToH_Trail"
-		clone.Parent = torso
+		
+		local trailObj
+		if item and item:IsA("Trail") then
+			trailObj = item:Clone()
+		else
+			trailObj = Instance.new("Trail")
+			trailObj.Color = ColorSequence.new(Color3.fromRGB(0, 3, 203))
+		end
+		
+		local att0 = torso:FindFirstChild("ToH_Att0") or Instance.new("Attachment", torso)
+		att0.Name = "ToH_Att0"
+		att0.Position = Vector3.new(0, 1, 0)
+		
+		local att1 = torso:FindFirstChild("ToH_Att1") or Instance.new("Attachment", torso)
+		att1.Name = "ToH_Att1"
+		att1.Position = Vector3.new(0, -1, 0)
+		
+		trailObj.Attachment0 = att0
+		trailObj.Attachment1 = att1
+		trailObj.Name = "ToH_Trail"
+		trailObj.Parent = torso
 		notify("ToH", "Equipped Trail to Torso: " .. name)
 	else
-		notify("ToH", "Trail asset or torso not found.")
+		notify("ToH", "Torso not found.")
 	end
 end
 
+-- FIXED: Torso/Head Effects
 local function applyTorsoEffect(name)
-	if not name then return notify("ToH", "Select an effect first!") end
+	if not name then return notify("ToH", "Select an effect!") end
 	local assets = ReplicatedStorage:FindFirstChild("assets") or ReplicatedStorage:FindFirstChild("Assets")
-	local effectsFolder = assets and (assets:FindFirstChild("effects") or assets:FindFirstChild("Effects"))
-	local item = findItemDeep(effectsFolder, name) or findItemDeep(assets, name)
+	local item = findItemDeep(assets and (assets:FindFirstChild("effects") or assets:FindFirstChild("Effects")), name) or findItemDeep(assets, name)
 	local char = player.Character
 	if item and char then
 		local targetPart = name:lower():find("head") and char:FindFirstChild("Head") or (char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart"))
-		if targetPart then 
-			item:Clone().Parent = targetPart 
-			notify("ToH", "Applied effect to " .. targetPart.Name) 
+		if targetPart then
+			local clone = item:Clone()
+			clone.Parent = targetPart
+			notify("ToH", "Applied effect to " .. targetPart.Name)
 		end
 	else
-		notify("ToH", "Effect asset not found.")
+		notify("ToH", "Effect not found.")
 	end
 end
 
 local function applyBillboard(name)
-	if not name then return notify("ToH", "Select a Billboard first!") end
-	local char = player.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not name then return notify("ToH", "Select a Billboard!") end
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if hrp then
 		local old = hrp:FindFirstChild("ToH_BB")
 		if old then old:Destroy() end
 		
 		local template = nil
-		for _, v in ipairs(Workspace:GetDescendants()) do
-			if v:IsA("BillboardGui") and v.Name == name then template = v break end
-		end
+		for _, v in ipairs(Workspace:GetDescendants()) do if v:IsA("BillboardGui") and v.Name == name then template = v break end end
 		if not template then
-			for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
-				if v:IsA("BillboardGui") and v.Name == name then template = v break end
-			end
+			for _, v in ipairs(ReplicatedStorage:GetDescendants()) do if v:IsA("BillboardGui") and v.Name == name then template = v break end end
 		end
 
-		local bb
-		if template then
-			bb = template:Clone()
-		else
-			bb = Instance.new("BillboardGui")
+		local bb = template and template:Clone() or Instance.new("BillboardGui")
+		if not template then
 			bb.Size = UDim2.fromOffset(120, 40)
 			bb.AlwaysOnTop = true
-			local lbl = Instance.new("TextLabel")
+			local lbl = Instance.new("TextLabel", bb)
 			lbl.Size = UDim2.fromScale(1, 1)
 			lbl.BackgroundTransparency = 1
 			lbl.Font = FONT
 			lbl.TextSize = 14
 			lbl.TextColor3 = Color3.fromRGB(0, 102, 255)
 			lbl.Text = name
-			lbl.Parent = bb
 		end
 		bb.Name = "ToH_BB"
 		bb.Adornee = hrp
 		bb.StudsOffset = Vector3.new(0, 3, 0)
 		bb.Parent = hrp
-		notify("ToH", "Applied Title Billboard to HumanoidRootPart: " .. name)
+		notify("ToH", "Attached Billboard to HumanoidRootPart: " .. name)
 	else
-		notify("ToH", "Character HumanoidRootPart not found.")
+		notify("ToH", "HumanoidRootPart not found.")
 	end
 end
 
 local function setLevelLeaderstat()
-	local targetVal = targetLevelValue
-	local leaderstats = player:FindFirstChild("leaderstats")
-	if leaderstats then
-		for _, stat in ipairs(leaderstats:GetChildren()) do
-			local lname = stat.Name:lower()
-			if lname:find("level") or lname:find("stage") or lname:find("lvl") then
-				if stat:IsA("IntValue") or stat:IsA("NumberValue") then stat.Value = targetVal end
+	local ls = player:FindFirstChild("leaderstats")
+	if ls then
+		for _, s in ipairs(ls:GetChildren()) do
+			if s.Name:lower():find("level") or s.Name:lower():find("stage") or s.Name:lower():find("lvl") then
+				if s:IsA("IntValue") or s:IsA("NumberValue") then s.Value = targetLevelValue end
 			end
 		end
-		notify("ToH", "Leaderstat level set to " .. targetVal)
+		notify("ToH", "Set leaderstat level to " .. targetLevelValue)
 	else
 		notify("ToH", "Leaderstats not found.")
 	end
 end
 
 local function setLevelUI()
-	local targetVal = targetLevelValue
 	pcall(function()
 		local pg = player:FindFirstChild("PlayerGui")
-		local uiTarget = pg and pg:FindFirstChild("levels") or StarterGui:FindFirstChild("levels")
-		if uiTarget then
-			local frame = uiTarget:FindFirstChild("frame")
-			local lvlFolder = frame and frame:FindFirstChild("level")
-			local lvlElem = lvlFolder and lvlFolder:FindFirstChild("level")
-			if lvlElem then
-				if lvlElem:IsA("TextLabel") or lvlElem:IsA("TextBox") then lvlElem.Text = tostring(targetVal)
-				elseif lvlElem:IsA("IntValue") or lvlElem:IsA("NumberValue") then lvlElem.Value = targetVal end
-				notify("ToH", "UI level set to " .. targetVal)
-				return
-			end
-		end
-		notify("ToH", "UI level element not found.")
-	end)
-end
-
-local function bringPiggyItem(itemName)
-	if not itemName then return notify("Piggy", "Select an item/key first!") end
-	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return notify("Piggy", "Character not found!") end
-	
-	local found = false
-	for _, v in ipairs(Workspace:GetDescendants()) do
-		if (v:IsA("Tool") or v:IsA("Model") or v:IsA("BasePart")) and v.Name:lower() == itemName:lower() then
-			local targetPart = v:IsA("Model") and v.PrimaryPart or v
-			if targetPart and targetPart:IsA("BasePart") then
-				targetPart.CFrame = hrp.CFrame + Vector3.new(2, 0, 0)
-				found = true
-			end
-		end
-	end
-	if found then
-		notify("Piggy", "Brought item: " .. itemName)
-	else
-		notify("Piggy", "Item not found in workspace.")
-	end
-end
-
-local function teleportAllPiggyItems()
-	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return notify("Piggy", "Character not found!") end
-	
-	local count = 0
-	for _, v in ipairs(Workspace:GetDescendants()) do
-		if v:IsA("Tool") or v:IsA("Model") then
-			local ln = v.Name:lower()
-			if ln:find("key") or ln:find("hammer") or ln:find("wrench") or ln:find("carrot") or ln:find("gun") or ln:find("c4") or ln:find("battery") or ln:find("fuel") then
-				local targetPart = v:IsA("Model") and v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart")
-				if targetPart then
-					targetPart.CFrame = hrp.CFrame + Vector3.new(math.random(-3, 3), 0, math.random(-3, 3))
-					count += 1
-				end
-			end
-		end
-	end
-	notify("Piggy", "Brought " .. count .. " items/keys to you!")
-end
-
-local function skipPiggyMap()
-	pcall(function()
-		for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
-			if v:IsA("IntValue") or v:IsA("NumberValue") then
-				if v.Name:lower():find("timer") or v.Name:lower():find("time") then
-					v.Value = 0
-				end
-			end
+		local ui = pg and pg:FindFirstChild("levels") or StarterGui:FindFirstChild("levels")
+		local elem = ui and ui:FindFirstChild("frame") and ui.frame:FindFirstChild("level") and ui.frame.level:FindFirstChild("level")
+		if elem then
+			if elem:IsA("TextLabel") or elem:IsA("TextBox") then elem.Text = tostring(targetLevelValue)
+			elseif elem:IsA("IntValue") or elem:IsA("NumberValue") then elem.Value = targetLevelValue end
+			notify("ToH", "Set UI level to " .. targetLevelValue)
+		else
+			notify("ToH", "UI level element not found.")
 		end
 	end)
-	notify("Piggy", "Attempted map/timer skip.")
 end
 
-local teleporting = false
-local cancelTTOH = false
-
-local function stageKey(part)
-	local node = part.Parent
-	while node and node ~= workspace do
-		local num = node.Name:match("%d+")
-		if num then return tonumber(num) end
-		node = node.Parent
-	end
-	return part.Position.Y
-end
-
-local function collectParts(targetName)
-	local list = {}
-	for _, d in ipairs(workspace:GetDescendants()) do
-		if d:IsA("BasePart") and d.Name:lower() == targetName then
-			table.insert(list, d)
-		end
-	end
-	table.sort(list, function(a, b)
-		local ka, kb = stageKey(a), stageKey(b)
-		if ka == kb then return a.Position.Y < b.Position.Y end
-		return ka < kb
-	end)
-	return list
-end
-
+-- TTOH Automation
+local ttohlRunning, cancelTTOH = false, false
 local function runTTOH()
-	if teleporting then return end
-	teleporting = true
+	if ttohlRunning then return end
+	ttohlRunning = true
 	cancelTTOH = false
-
-	local stops = collectParts("stop")
-	local starts = collectParts("start")
-	local total = math.max(#stops, #starts)
-
-	notify("TTOH", ("Found %d Stop and %d Start parts. Teleporting..."):format(#stops, #starts))
-
+	local stops, starts = {}, {}
+	for _, d in ipairs(Workspace:GetDescendants()) do
+		if d:IsA("BasePart") then
+			if d.Name:lower() == "stop" then table.insert(stops, d)
+			elseif d.Name:lower() == "start" then table.insert(starts, d) end
+		end
+	end
 	local count = 0
-	for i = 1, total do
-		for _, part in ipairs({ stops[i], starts[i] }) do
+	for i = 1, math.max(#stops, #starts) do
+		for _, p in ipairs({ stops[i], starts[i] }) do
 			if cancelTTOH then break end
-			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-			if part and part.Parent and root then
-				root.CFrame = part.CFrame + Vector3.new(0, 4, 0)
-				count += 1
-				task.wait(0.25)
-			end
+			local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if p and hrp then hrp.CFrame = p.CFrame + Vector3.new(0, 4, 0) count += 1 task.wait(0.25) end
 		end
 		if cancelTTOH then break end
 	end
-
-	teleporting = false
-	notify("TTOH", (cancelTTOH and "Cancelled!" or "Done! Teleported to " .. count .. " parts."))
+	ttohlRunning = false
+	notify("TTOH", cancelTTOH and "Cancelled TTOH!" or ("Teleported to " .. count .. " parts."))
 end
 
 ---------------------------------------------------------------------
--- UI WINDOW & TABS SETUP
+-- UI Window Construction & Tabs
 ---------------------------------------------------------------------
 local Window = NetUI:CreateWindow({ Name = "NETsourcesgg Hub" })
 
--- 1. MAIN TAB
-local MainTab = Window:CreateTab("Main", 4483362458)
+-- Main Tab
+local MainTab = Window:CreateTab("Main")
 MainTab:CreateSection("Movement & Stats")
-MainTab:CreateSlider({ Name = "Walk Speed", Range = { 0, 100 }, Increment = 1, CurrentValue = walkSpeed,
-	Callback = function(v) walkSpeed = v applyStats() end })
-MainTab:CreateSlider({ Name = "Jump Power", Range = { 0, 100 }, Increment = 1, CurrentValue = jumpPower,
-	Callback = function(v) jumpPower = v applyStats() end })
-MainTab:CreateToggle({ Name = "Fly (WASD, Space, Ctrl)", CurrentValue = false,
-	Callback = function(v) if v then startFly() else stopFly() end end })
-MainTab:CreateSlider({ Name = "Fly Speed", Range = { 0, 100 }, Increment = 1, CurrentValue = flySpeed,
-	Callback = function(v) flySpeed = v end })
+MainTab:CreateSlider({ Name = "Walk Speed", Range = { 0, 100 }, Increment = 1, CurrentValue = walkSpeed, Callback = function(v) walkSpeed = v applyStats() end })
+MainTab:CreateSlider({ Name = "Jump Power", Range = { 0, 100 }, Increment = 1, CurrentValue = jumpPower, Callback = function(v) jumpPower = v applyStats() end })
+MainTab:CreateToggle({ Name = "Fly (WASD, Space, Ctrl)", CurrentValue = false, Callback = function(v) if v then startFly() else stopFly() end end })
+MainTab:CreateSlider({ Name = "Fly Speed", Range = { 0, 100 }, Increment = 1, CurrentValue = flySpeed, Callback = function(v) flySpeed = v end })
 MainTab:CreateToggle({ Name = "Noclip", CurrentValue = false, Callback = function(v) noclip = v end })
 MainTab:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Callback = function(v) infJump = v end })
-
 MainTab:CreateSection("World & OP")
-MainTab:CreateToggle({ Name = "God Mode", CurrentValue = false,
-	Callback = function(v) godMode = v applyGod() end })
-MainTab:CreateToggle({ Name = "Fullbright", CurrentValue = false, Callback = toggleFullbright })
+MainTab:CreateToggle({ Name = "God Mode", CurrentValue = false, Callback = function(v) godMode = v local h = getHum() if h then h.MaxHealth = godMode and math.huge or 100 h.Health = h.MaxHealth end end })
+MainTab:CreateToggle({ Name = "Fullbright", CurrentValue = false, Callback = function(v) fullbrightOn = v end })
 
--- 2. ToH TAB
-local ToHTab = Window:CreateTab("ToH", 4483362458)
-ToHTab:CreateSection("Progression Automation")
+-- ToH Tab
+local ToHTab = Window:CreateTab("ToH")
+ToHTab:CreateSection("Automation")
 ToHTab:CreateButton({ Name = "Teleport Through All Stop/Start Parts", Callback = function() task.spawn(runTTOH) end })
 ToHTab:CreateButton({ Name = "Cancel TTOH", Callback = function() cancelTTOH = true end })
 
 ToHTab:CreateSection("Gear Spawner")
-ToHTab:CreateDropdown({ Name = "Gears", Options = gearsList, CurrentOption = {}, MultipleOptions = false,
-	Callback = function(opt) selectedGear = firstOf(opt) end })
+ToHTab:CreateDropdown({ Name = "Gears", Options = gearsList, Callback = function(opt) selectedGear = firstOf(opt) end })
 ToHTab:CreateButton({ Name = "Give Gear", Callback = function() giveGear(selectedGear, false) end })
-
-ToHTab:CreateDropdown({ Name = "Event Gears (Summer2026)", Options = summerGearsList, CurrentOption = {}, MultipleOptions = false,
-	Callback = function(opt) selectedSummerGear = firstOf(opt) end })
+ToHTab:CreateDropdown({ Name = "Event Gears (Summer2026)", Options = summerGearsList, Callback = function(opt) selectedSummerGear = firstOf(opt) end })
 ToHTab:CreateButton({ Name = "Give Event Gear", Callback = function() giveGear(selectedSummerGear, true) end })
 
 ToHTab:CreateSection("Customization & Effects")
-ToHTab:CreateDropdown({ Name = "Accessories (Halos)", Options = halosList, CurrentOption = {}, MultipleOptions = false,
-	Callback = function(opt) selectedAccessory = firstOf(opt) end })
+ToHTab:CreateDropdown({ Name = "Accessories (Halos)", Options = halosList, Callback = function(opt) selectedAccessory = firstOf(opt) end })
 ToHTab:CreateButton({ Name = "Equip Accessory (Halo)", Callback = function() applyAccessory(selectedAccessory) end })
-
-ToHTab:CreateDropdown({ Name = "Trails", Options = trailsList, CurrentOption = {}, MultipleOptions = false,
-	Callback = function(opt) selectedTrail = firstOf(opt) end })
+ToHTab:CreateDropdown({ Name = "Trails", Options = trailsList, Callback = function(opt) selectedTrail = firstOf(opt) end })
 ToHTab:CreateButton({ Name = "Equip Trail to Torso", Callback = function() applyTrail(selectedTrail) end })
-
-ToHTab:CreateDropdown({ Name = "Torso/Head Effects", Options = effectsList, CurrentOption = {}, MultipleOptions = false,
-	Callback = function(opt) selectedTorsoEffect = firstOf(opt) end })
+ToHTab:CreateDropdown({ Name = "Torso/Head Effects", Options = effectsList, Callback = function(opt) selectedTorsoEffect = firstOf(opt) end })
 ToHTab:CreateButton({ Name = "Apply Torso/Head Effect", Callback = function() applyTorsoEffect(selectedTorsoEffect) end })
-
-ToHTab:CreateDropdown({ Name = "Billboard GUIs", Options = getGameBillboards(), DynamicOptions = getGameBillboards, CurrentOption = {}, MultipleOptions = false,
-	Callback = function(opt) selectedBillboard = firstOf(opt) end })
+ToHTab:CreateDropdown({ Name = "Billboard GUIs", Options = getGameBillboards(), DynamicOptions = getGameBillboards, Callback = function(opt) selectedBillboard = firstOf(opt) end })
 ToHTab:CreateButton({ Name = "Apply Billboard GUI to HRP", Callback = function() applyBillboard(selectedBillboard) end })
 
 ToHTab:CreateSection("Level Progression")
-ToHTab:CreateSlider({ Name = "Target Level", Range = { 1, 100 }, Increment = 1, CurrentValue = 1,
-	Callback = function(v) targetLevelValue = v end })
+ToHTab:CreateSlider({ Name = "Target Level", Range = { 1, 100 }, Increment = 1, CurrentValue = 1, Callback = function(v) targetLevelValue = v end })
 ToHTab:CreateButton({ Name = "Set Level Leaderstat", Callback = setLevelLeaderstat })
 ToHTab:CreateButton({ Name = "Set Level UI", Callback = setLevelUI })
 
--- 3. PIGGY TAB
-local PiggyTab = Window:CreateTab("Piggy", 4483362458)
-PiggyTab:CreateSection("Item & Key Automation")
-PiggyTab:CreateDropdown({ Name = "Items / Keys", Options = getPiggyItems(), DynamicOptions = getPiggyItems, CurrentOption = {}, MultipleOptions = false,
-	Callback = function(opt) selectedPiggyItem = firstOf(opt) end })
-PiggyTab:CreateButton({ Name = "Bring Selected Item", Callback = function() bringPiggyItem(selectedPiggyItem) end })
-PiggyTab:CreateButton({ Name = "Bring All Items / Keys", Callback = teleportAllPiggyItems })
-
-PiggyTab:CreateSection("Match Control")
-PiggyTab:CreateButton({ Name = "Skip Map / Timer", Callback = skipPiggyMap })
-
--- 4. SETTINGS TAB
-local SettingsTab = Window:CreateTab("Settings", 4483362458)
+-- Settings Tab
+local SettingsTab = Window:CreateTab("Settings")
 SettingsTab:CreateSection("Theme Mode (Required)")
 SettingsTab:CreateButton({ Name = "Dark Mode", Callback = function() activeThemeMode = "dark" updateThemeColors() notify("Settings", "Dark Mode applied") end })
 SettingsTab:CreateButton({ Name = "Light Mode", Callback = function() activeThemeMode = "light" updateThemeColors() notify("Settings", "Light Mode applied") end })
-
 SettingsTab:CreateSection("UIStroke Style (Required)")
 SettingsTab:CreateButton({ Name = "Sky (Normal Stroke)", Callback = function() activeStrokeMode = "sky" updateThemeColors() notify("Settings", "Sky stroke applied") end })
 SettingsTab:CreateButton({ Name = "Sunrise (Orange-Red)", Callback = function() activeStrokeMode = "sunrise" updateThemeColors() notify("Settings", "Sunrise stroke applied") end })
 SettingsTab:CreateButton({ Name = "Moonlit (Blue-Purple)", Callback = function() activeStrokeMode = "moonlit" updateThemeColors() notify("Settings", "Moonlit stroke applied") end })
 SettingsTab:CreateButton({ Name = "Apple (Red Stroke)", Callback = function() activeStrokeMode = "apple" updateThemeColors() notify("Settings", "Apple stroke applied") end })
 
--- 5. CREDITS TAB
-local CreditsTab = Window:CreateTab("Credits", 4483362458)
+-- Credits Tab
+local CreditsTab = Window:CreateTab("Credits")
 CreditsTab:CreateSection("Development Team")
 CreditsTab:CreateLabel("@lustisfirst on discord - UI Creation")
 CreditsTab:CreateLabel("@lustisfirst on discord - Coding + Scripting")
